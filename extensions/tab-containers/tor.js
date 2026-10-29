@@ -22,6 +22,28 @@ var PFTor = (function () {
   }
   /** Only web addresses are opened in a Tor tab; the browser's own pages have nothing to hide and cannot be. */
   function openable(url) { return /^(https?|ftp):/i.test(String(url || '')); }
-  return { NAME, PROXIES, isTorName, route, openable };
+  /* SITES THAT ALWAYS OPEN IN TOR ("should open .onions in tor automatically and should be able to set a list of sites
+   * to use on Tor only somehow in an easy way", 2026-10-29). A .onion can only be reached through Tor, so it always is;
+   * a listed site is matched with every subdomain (example.com covers www.example.com, not notexample.com). */
+  function hostOf(url) { try { return new URL(String(url || '')).hostname.toLowerCase().replace(/\.$/, ''); } catch (_) { return ''; } }
+  /** What goes on the list for an address or a typed name: its host, without a leading www. '' when it is not one. */
+  function siteOf(input) {
+    let s = String(input || '').trim().toLowerCase();
+    if (!s) return '';
+    if (!/^[a-z][a-z0-9+.-]*:/.test(s)) s = 'https://' + s;
+    const h = hostOf(s);
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h) ? h.replace(/^www\./, '') : '';
+  }
+  function onList(url, sites) {
+    const h = hostOf(url);
+    return !!h && (sites || []).some(d => d && (h === d || h.endsWith('.' + d)));
+  }
+  /** Does this address belong in a Tor tab? A web address that is a .onion or on the list. */
+  function wantsTor(url, sites) {
+    if (!openable(url)) return false;
+    const h = hostOf(url);
+    return h.endsWith('.onion') || onList(url, sites);
+  }
+  return { NAME, PROXIES, isTorName, route, openable, hostOf, siteOf, onList, wantsTor };
 })();
 if (typeof module !== 'undefined') module.exports = PFTor;

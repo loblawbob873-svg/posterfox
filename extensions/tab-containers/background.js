@@ -7,6 +7,16 @@
 
   const tor = new Set();            // the ones that are Tor tabs (tor.js): their requests go through Tor
   const agent = PFAgent.install();  // each container's browser identity (useragent.js)
+  /* Sites that always open in Tor (tor.js wantsTor): the person's list (storage.local, edited from the page menu and the
+   * add-on's settings page) plus any an administrator preset through policy (storage.managed "torSites"). */
+  let torSites = [], presetSites = [];
+  const sitesNow = () => torSites.concat(presetSites);
+  async function loadSites() {
+    try { torSites = ((await browser.storage.local.get('torSites')).torSites || []).map(PFTor.siteOf).filter(Boolean); } catch (_) { torSites = []; }
+    try { presetSites = ((await browser.storage.managed.get('torSites')).torSites || []).map(PFTor.siteOf).filter(Boolean); } catch (_) { presetSites = []; }
+  }
+  const sitesReady = loadSites();
+  if (browser.storage && browser.storage.onChanged) browser.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.torSites) loadSites(); });
   async function fresh(isTor) {
     const id = await browser.contextualIdentities.create(isTor
       ? { name: PFTor.NAME + ' ' + (++n), color: 'purple', icon: 'fingerprint' }
@@ -43,9 +53,29 @@
   if (browser.menus) {
     browser.menus.create({ id: 'pf-tor-new', title: 'New Tor tab', contexts: ['tab'] });
     browser.menus.create({ id: 'pf-tor-link', title: 'Open link in a Tor tab', contexts: ['link'] });
-    browser.menus.onClicked.addListener((info, tab) => {
+    // The page menu adds or removes THIS site from the always-in-Tor list, and says which it will do.
+    browser.menus.create({ id: 'pf-tor-site', title: 'Always open this site in Tor', contexts: ['page', 'tab'] });
+    if (browser.menus.onShown) browser.menus.onShown.addListener(async (info, tab) => {
+      await sitesReady;
+      const url = info.pageUrl || (tab && tab.url), site = PFTor.siteOf(url);
+      // The entry that COVERS this page (example.com covers news.example.com), not only an exact one.
+      const covering = torSites.find(d => PFTor.onList(url, [d])), preset = !!site && PFTor.onList(url, presetSites);
+      browser.menus.update('pf-tor-site', { visible: !!site, enabled: !preset,
+        title: preset ? 'Always opened in Tor (set by your administrator)'
+             : covering ? 'Stop always opening ' + covering + ' in Tor' : 'Always open ' + site + ' in Tor' });
+      if (browser.menus.refresh) browser.menus.refresh();
+    });
+    browser.menus.onClicked.addListener(async (info, tab) => {
       if (info.menuItemId === 'pf-tor-new') openTor('', tab);
       else if (info.menuItemId === 'pf-tor-link') openTor(info.linkUrl, tab);
+      else if (info.menuItemId === 'pf-tor-site') {
+        const url = info.pageUrl || (tab && tab.url), site = PFTor.siteOf(url); if (!site) return;
+        const covering = torSites.find(d => PFTor.onList(url, [d]));
+        const next = covering ? torSites.filter(d => d !== covering) : torSites.concat(site);
+        await browser.storage.local.set({ torSites: next }); torSites = next;
+        // Added: this tab moves into Tor now, rather than on the next visit.
+        if (!covering && tab && !tor.has(tab.cookieStoreId) && PFTor.openable(tab.url)) moveToTor(tab, tab.url);
+      }
     });
   }
   if (browser.commands) browser.commands.onCommand.addListener(async (c) => {
@@ -66,8 +96,23 @@
     } finally { moving.delete(tab.id); }
   }
 
+  /* A page that belongs in Tor, asked for in an ordinary tab: the same tab's place, a Tor tab, that address. */
+  async function moveToTor(tab, url) {
+    if (moving.has(tab.id)) return;
+    moving.add(tab.id);
+    try {
+      const store = await fresh(true);
+      const opts = { cookieStoreId: store, index: tab.index, active: tab.active, windowId: tab.windowId, url };
+      if (tab.openerTabId != null) opts.openerTabId = tab.openerTabId;
+      await browser.tabs.create(opts);
+      await browser.tabs.remove(tab.id);
+    } finally { moving.delete(tab.id); }
+  }
+
   browser.webRequest.onBeforeRequest.addListener(details => {
-    return browser.tabs.get(details.tabId).then(tab => {
+    return Promise.all([browser.tabs.get(details.tabId), sitesReady]).then(([tab]) => {
+      if (details.type === 'main_frame' && !tor.has(tab.cookieStoreId) && !moving.has(tab.id)
+          && PFTor.wantsTor(details.url, sitesNow())) { moveToTor(tab, details.url); return { cancel: true }; }
       if (!C.shouldMove(details, tab)) return {};
       replace(tab, details.url);
       return { cancel: true };

@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sites that open in Tor</title>
+<style>
+  body{font:14px system-ui,sans-serif;margin:12px;min-width:340px;color:#e8e6f5;background:#14102a}
+  h1{font-size:16px;margin:0 0 4px} p{margin:0 0 10px;color:#a9a4c8}
+  form{display:flex;gap:6px;margin:0 0 10px} input{flex:1;padding:6px 8px;border-radius:6px;border:1px solid #3a3360;background:#1d1838;color:inherit}
+  button{padding:6px 10px;border-radius:6px;border:1px solid #3a3360;background:#2a2150;color:inherit;cursor:pointer}
+  ul{list-style:none;margin:0;padding:0} li{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #2a2450}
+  .preset{color:#a9a4c8;font-size:12px} .empty{color:#a9a4c8}
+</style>
+<h1>Sites that always open in Tor</h1>
+<p>.onion addresses always open in a Tor tab. Add any other site here, or right-click a page and choose "Always open … in Tor". A site includes its subdomains.</p>
+<form id="add"><input id="site" placeholder="example.com" autocomplete="off"><button>Add</button></form>
+<ul id="list"></ul>
+<script src="tor.js"></script>
+<script src="options.js"></script>

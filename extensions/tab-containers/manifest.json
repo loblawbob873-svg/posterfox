@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "PosterFox Tab Containers",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Every tab is its own temporary container (its own cookies and storage, deleted when the tab closes), Tor tabs that go through this machine's Tor, and tabs left alone for two minutes go to sleep, and every tab presents its own real browser (Chrome, Edge, Brave, Firefox or Safari) consistently in its requests and to its pages.",
   "browser_specific_settings": {
     "gecko": {
@@ -10,6 +10,7 @@
     }
   },
   "permissions": [
+    "storage",
     "contextualIdentities",
     "cookies",
     "tabs",
@@ -36,5 +37,9 @@
       },
       "description": "New Tor tab"
     }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
   }
 }

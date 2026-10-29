@@ -16,8 +16,9 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node")
 
 HARNESS = r"""
 const fs = require('fs'), vm = require('vm');
-const state = { tabs: SEED_TABS, ids: SEED_IDS, nextTab: 100, nextId: 1, removedIds: [], scripts: [], unregistered: [] };
-const L = { req: null, created: null, removed: null, updated: null, headers: null };
+const state = { tabs: SEED_TABS, ids: SEED_IDS, nextTab: 100, nextId: 1, removedIds: [], scripts: [], unregistered: [],
+                local: SEED_LOCAL, managed: SEED_MANAGED, menus: {} };
+const L = { req: null, created: null, removed: null, updated: null, headers: null, menuClick: null, menuShown: null };
 // A tab finishes loading: its address is now `url`, as the browser reports it.
 const finish = async (id, url) => { const t = state.tabs.find(t => t.id === id); if (!t) return; t.url = url; t.status = 'complete';
                                     if (L.updated) L.updated(id, { status: 'complete' }, t); };
@@ -39,10 +40,15 @@ const browser = {
     onRemoved: { addListener: f => { L.removed = f; } },
   },
   webRequest: { onBeforeRequest: { addListener: f => { L.req = f; } }, onBeforeSendHeaders: { addListener: f => { L.headers = f; } } },
+  storage: { local: { get: async k => ({ [k]: state.local[k] }), set: async o => Object.assign(state.local, o) },
+             managed: { get: async k => { if (!(k in state.managed)) throw new Error('no policy'); return { [k]: state.managed[k] }; } },
+             onChanged: { addListener: () => {} } },
+  menus: { create: o => { state.menus[o.id] = Object.assign({}, o); }, update: (id, o) => Object.assign(state.menus[id], o), refresh: () => {},
+           onClicked: { addListener: f => { L.menuClick = f; } }, onShown: { addListener: f => { L.menuShown = f; } } },
   contentScripts: { register: async o => { state.scripts.push({ store: o.cookieStoreId, code: o.js[0].code, runAt: o.runAt, allFrames: o.allFrames });
                                          return { unregister: () => state.unregistered.push(o.cookieStoreId) }; } },
 };
-const ctx = vm.createContext({ browser, console, Set, Map, Promise, parseInt, setTimeout, JSON, Math, Object, Date,
+const ctx = vm.createContext({ browser, console, Set, Map, Promise, parseInt, setTimeout, JSON, Math, Object, Date, URL,
                                navigator: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:159.0) Gecko/20100101 Firefox/159.0' } });
 vm.runInContext(['containers.js', 'tor.js', 'useragent.js', 'background.js'].map(f => fs.readFileSync(EXT + '/' + f, 'utf8')).join('\n'), ctx);
 const tick = () => new Promise(r => setTimeout(r, 20));
@@ -51,13 +57,15 @@ const tick = () => new Promise(r => setTimeout(r, 20));
   const out = {};
   STEPS
   console.log(JSON.stringify({ out, tabs: state.tabs, ids: state.ids.map(i => i.cookieStoreId), removed: state.removedIds,
-                               scripts: state.scripts, unregistered: state.unregistered }));
+                               scripts: state.scripts, unregistered: state.unregistered, local: state.local, menus: state.menus,
+                               torIds: state.ids.filter(i => /Tor tab/.test(i.name)).map(i => i.cookieStoreId) }));
 })();
 """
 
 
-def run(seed_tabs, seed_ids, steps):
+def run(seed_tabs, seed_ids, steps, local=None, managed=None):
     js = (HARNESS.replace("SEED_TABS", json.dumps(seed_tabs)).replace("SEED_IDS", json.dumps(seed_ids))
+          .replace("SEED_LOCAL", json.dumps(local or {})).replace("SEED_MANAGED", json.dumps(managed or {}))
           .replace("EXT", json.dumps(str(EXT))).replace("STEPS", steps))
     r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr
