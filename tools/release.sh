@@ -34,6 +34,8 @@ DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 LOG=$HOME/.cache/posterfox/release.log; mkdir -p "$(dirname "$LOG")"
 say() { echo "[posterfox $(date +%H:%M:%S)] $*" | tee -a "$LOG"; }
 die() { say "STOPPED: $*"; exit 1; }
+# set -e ends the run at any failing command; say where, or a timer run just stops with nothing in the log.
+trap 'say "STOPPED: unexpected failure at line $LINENO (exit $?)"' ERR
 vm() { # shellcheck disable=SC2086
 	ssh -o BatchMode=yes -o ConnectTimeout=20 $VM "$@"; }
 
@@ -99,7 +101,7 @@ say "updating PosterFox's libraries on the build VM"
 DEPS="--oneshot --update --onlydeps --onlydeps-with-rdeps=y --with-bdeps=n --usepkg --getbinpkg =www-client/$WANT"
 PLAN=$(vm "emerge -p $DEPS" 2>>"$LOG") || die "could not plan PosterFox's library update on the VM (see $LOG)"
 echo "$PLAN" >>"$LOG"
-SRC=$(echo "$PLAN" | grep '^\[ebuild' | sed 's/^\[ebuild[^]]*\] *//; s/ .*//' | tr '\n' ' ')
+SRC=$(echo "$PLAN" | { grep '^\[ebuild' || true; } | sed 's/^\[ebuild[^]]*\] *//; s/ .*//' | tr '\n' ' ')
 [ -z "$SRC" ] || die "updating PosterFox's libraries would compile from source on the VM: $SRC"
 if echo "$PLAN" | grep -q '^\[binary'; then
 	vm "emerge --quiet $DEPS" >>"$LOG" 2>&1 || die "could not update PosterFox's libraries on the VM (see $LOG)"
