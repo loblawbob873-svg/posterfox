@@ -133,14 +133,19 @@ def test_app_scope_addons_are_enabled_and_the_theme_is_default():
     ("http://192.168.0.2:3051", "http://192.168.0.2:3051/client?pcai=1"),
     ("javascript:alert(1)", None),
     ("https://evil.example/path?x", None),
-    ("", None),
+    ("", None),                                               # "no server", chosen on purpose
+    (KeyError, "https://poster.place/client?pcai=1"),           # never chosen: the desktop's own default (the laptop)
+    (FileNotFoundError, "https://poster.place/client?pcai=1"),  # no desktop config yet
 ])
 def test_the_autoconfig_points_the_ai_sidebar_at_this_computers_instance(tmp_path, instance, want):
     """Runs the shipped posterfox.cfg under node with Firefox's autoconfig globals faked: Home has the PosterChan
     desktop's config.json, defaultPref records what it sets. Only a plain origin may become the sidebar URL."""
     home = tmp_path / "home"
     (home / ".config" / "posterchan-desktop").mkdir(parents=True)
-    (home / ".config" / "posterchan-desktop" / "config.json").write_text(json.dumps({"instance": instance}))
+    if instance is KeyError:
+        (home / ".config" / "posterchan-desktop" / "config.json").write_text(json.dumps({"maximized": True, "tor": False}))
+    elif instance is not FileNotFoundError:
+        (home / ".config" / "posterchan-desktop" / "config.json").write_text(json.dumps({"instance": instance}))
     cfg = (ROOT / "distribution" / "posterfox.cfg").read_text()
     js = r"""
 const fs=require('fs'),path=require('path'); const set={};
@@ -206,6 +211,17 @@ def test_no_telemetry_and_no_mozilla_account():
     assert pol["DisableTelemetry"] is True and pol["DisableFirefoxAccounts"] is True
     smoke_src = (ROOT / "tools" / "smoke.py").read_text()
     assert '"identity.fxaccounts.enabled"' in smoke_src and "Mozilla accounts" in smoke_src
+
+
+def test_the_window_stylesheet_never_paints_over_the_theme_banner():
+    """"we have a posterchan theme for firefox" (2026-10-29): it was active, but #TabsToolbar had a solid background
+    that covered its neon wash and mascot. The release smoke test measures it in the running browser too."""
+    css = (ROOT / "distribution" / "posterfox-chrome.css").read_text()
+    for sel in ("#TabsToolbar", "#navigator-toolbox", "#titlebar"):
+        for m in re.finditer(re.escape(sel) + r"\s*\{([^}]*)\}", css):
+            bg = re.findall(r"background(?:-color|-image)?\s*:\s*([^;!]+)", m.group(1))
+            assert all(v.strip() in ("transparent", "none") for v in bg), (sel, bg)
+    assert "the tab strip is painted over" in (ROOT / "tools" / "smoke.py").read_text()
 
 
 def test_window_buttons_like_posterchan_windows():

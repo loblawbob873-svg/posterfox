@@ -96,6 +96,10 @@ return {
     "toolkit.telemetry.enabled", "datareporting.healthreport.uploadEnabled", "browser.tabs.inTitlebar",
     "identity.fxaccounts.enabled"].map(k => [k, get(k)])),
   chromeCss: css.exists() && sss.sheetRegistered(Services.io.newFileURI(css), sss.USER_SHEET),
+  themeFrame: (() => { try { const w = Services.wm.getMostRecentWindow("navigator:browser"); if (!w) return null;
+    const tb = w.document.getElementById("TabsToolbar"), box = w.document.getElementById("navigator-toolbox");
+    return { tabsBg: w.getComputedStyle(tb).backgroundColor, tabsImg: w.getComputedStyle(tb).backgroundImage,
+             frame: w.getComputedStyle(box).backgroundImage }; } catch (e) { return { error: String(e) }; } })(),
 };
 """
 CHROME_ADDONS = r"""
@@ -192,6 +196,10 @@ def main(argv):
         need(p.get("toolkit.telemetry.enabled") is False, "telemetry is enabled")
         need(p.get("identity.fxaccounts.enabled") is False, "Mozilla accounts (Sync sign-in) are enabled")
         need(report.get("chromeCss") is True, "the PosterChan window stylesheet is not registered")
+        tf = report.get("themeFrame") or {}
+        need("url(" in (tf.get("frame") or ""), "the PosterChan theme's banner is not on the toolbar (%s)" % tf)
+        need((tf.get("tabsBg") or "") in ("rgba(0, 0, 0, 0)", "transparent") and (tf.get("tabsImg") or "none") == "none",
+             "the tab strip is painted over the PosterChan theme's banner (%s)" % tf)
         ads = {a["id"]: a for a in report.get("addons") or [] if isinstance(a, dict)}
         for aid, name in ADDONS.items():
             need(aid in ads and ads[aid]["active"], name + " is missing or disabled")
