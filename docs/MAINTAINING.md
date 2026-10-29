@@ -275,14 +275,16 @@ At 16–32 px only her face in the cat hood is used.
 
 ## 7. Not done yet
 
-- **PosterChanOS machines do not install PosterFox yet.** `gentoo.sh` still installs `firefox-bin`. Once the first
-  signed PosterFox is published **and checked on a real PosterChanOS desktop** (look, window buttons, containers,
-  codecs, add-ons, an existing profile carrying over), **firefox-bin is replaced by PosterFox in `gentoo.sh`**:
-  - a `[posterchan]` entry in `binrepos.conf` pointing at the binhost;
-  - the public key;
-  - `www-client/posterfox` installed from the signed binary in place of `firefox-bin`.
-- **The daily timer is not enabled yet.** It is enabled after the first release has gone through `release.sh` end
-  to end.
+Done since the first release (2026-10-29):
+- **PosterChanOS installs PosterFox.** `gentoo.sh` adds the `[posterchan]` binhost with `verify-signature = true`,
+  trusts the key pinned in it (`POSTERCHAN_BINPKG_FPR`), and installs PosterFox from its signed binary in its own step
+  (`installBrowser`, `gentoo.sh browser`); links open in it. Verified on the build VM: it installs from the binhost,
+  and a package signed by another key is refused.
+- **The daily timer is enabled** on server1 (`systemctl --user list-timers posterfox-release.timer`).
+
+Still open:
+- **Machines installed before the switch** keep `firefox-bin` until somebody runs `gentoo.sh repo` then
+  `gentoo.sh browser` on them. They are not migrated automatically.
 - **PosterChan Connect** (passwords from the PosterChan vault, bookmark sync over Nostr, a Tor switch) is designed
   in `docs/CONNECT.md` and not built.
 
