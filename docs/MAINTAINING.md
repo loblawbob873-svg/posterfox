@@ -62,10 +62,21 @@ PosterFox policy.
    It commits the package and **deploys** it with `sync.sh` like any other change, which publishes the overlay.
 3. **Builds on the build VM.** First it updates PosterFox's libraries on the VM to what Gentoo's binhost serves
    (binaries only). `--buildpkgonly` links against what the VM has installed, so without this a new build could be
-   stale on the day it is published. Then `emerge --oneshot --buildpkgonly`, spreading the C/C++ over nas.lan and
-   server1 with distcc.
-4. **Signs** the package on server1 (the key never leaves it), rebuilds the binhost index, publishes it to nas, and
-   confirms the public index lists the new package.
+   stale on the day it is published. Then `emerge --oneshot --buildpkgonly`. The compile takes about 18 minutes on the
+   VM's own cores (see "distcc" below).
+4. **Checks the built browser** before anyone gets it. `tools/smoke.py` unpacks the built package on the VM and starts
+   it headless as an ordinary user, then asks it over Marionette (Firefox's own remote protocol):
+   - its name is PosterFox and telemetry is compiled out;
+   - the enterprise policies are active;
+   - uBlock Origin, Privacy Badger, the tab-container add-on and the cyberpunk theme are enabled;
+   - history and form history are off, and data is cleared on exit;
+   - the PosterChan window stylesheet is registered;
+   - H.264, AAC, VP9, AV1, Opus, FLAC and MP3 can play;
+   - every new tab opens in its own container.
+
+   Any failure stops the run. "It compiled" is not "it works": r6 and r7 compiled and could not even be installed.
+5. **Signs** the package on server1 (the key never leaves it), rebuilds the binhost index, publishes it to nas, and
+   confirms the public index lists the new package. An unsigned package is never published.
 
 It stops at the first failure with **nothing half-published**. It also refuses to start while another deploy is
 running. A run with nothing to do takes about a minute; a release takes the deploy gate (~30 min) plus the build
@@ -193,10 +204,17 @@ machines: the same profile, USE flags, CHOST and `-march=x86-64-v3`. Its PosterF
 **distcc.** It is Portage's own setup (`FEATURES=distcc`), nothing custom.
 - nas.lan's distccd also accepts the VM's NAT subnet, via the drop-in
   `/etc/systemd/system/distccd.service.d/posterfox-vm.conf` (`--allow 192.168.122.0/24`).
-- Rust, most of Firefox, does not distribute; the C/C++ half does.
+- **Measured 2026-10-29: distcc does not distribute this build at all.** During the C++ compile the VM ran clang itself
+  and there were no distcc processes. Firefox's build calls clang by its absolute path, which bypasses Portage's distcc
+  wrapper directory. Making it work needs an allowed-commands list (`DISTCC_CMDLIST`) on every distcc server, which was
+  decided against. The whole compile takes about 18 minutes on the VM alone, so nothing more is needed. Rust never
+  distributes anyway.
 
 **The signing key** was made once by `tools/binhost-setup.sh`.
 - Fingerprint `7B690AA70C09AD1AD7748CF5B6F8DA9DDF2EF936`; the public half is `keys/posterchanos-binpkgs.asc`.
+- Signing: `gpkg-sign --allow-unsigned`, because gpkg-sign first verifies the package and a fresh build has no
+  signature yet. `BINPKG_GPG_SIGNING_BASE_COMMAND` is overridden so its lock is `~/.config/posterfox/gnupg/.sign.lock`;
+  Portage's default lock is in `/run/lock`, which only root can write.
 - The secret half is only in `~/.config/posterfox/gnupg` on server1. It has no passphrase so the timer can sign
   unattended, which is exactly why it signs nothing but PosterChanOS packages and never goes anywhere else
   (not GitHub, not a CI secret).
