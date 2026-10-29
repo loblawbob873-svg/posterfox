@@ -38,7 +38,16 @@ vm() { # shellcheck disable=SC2086
 	ssh -o BatchMode=yes -o ConnectTimeout=20 $VM "$@"; }
 
 # One deploy at a time on server1 (and one test run): a gate already running means "try again tomorrow".
-if pgrep -f deploy_regression_gate >/dev/null 2>&1 || pgrep -x sync.sh >/dev/null 2>&1; then
+# A sync.sh whose only child is its post-deploy APK waiter (scripts/wait_apk_build.sh, up to an hour of CI) is a
+# finished deploy, not a running one.
+deploying() {
+	# Anchored: an unanchored pattern also matches any shell whose command line merely mentions the gate.
+	pgrep -f '^[^ ]*python[^ ]* ([^ ]+ )*scripts/deploy_regression_gate[.]py' >/dev/null 2>&1 && return 0
+	local p
+	for p in $(pgrep -x sync.sh); do pgrep -P "$p" -f wait_apk_build >/dev/null 2>&1 || return 0; done
+	return 1
+}
+if deploying; then
 	say "a deploy is running -- not starting one beside it"; exit 0
 fi
 
