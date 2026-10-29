@@ -94,8 +94,16 @@ fi
 # --buildpkgonly links against what the VM HAS, not what the tree offers: bring every library PosterFox depends on up to
 # what Gentoo's binhost serves (binaries only, never a compile), or the new build is stale the day it is published.
 say "updating PosterFox's libraries on the build VM"
-vm "emerge --oneshot --update --onlydeps --onlydeps-with-rdeps=y --usepkgonly --getbinpkg --quiet =www-client/$WANT" >>"$LOG" 2>&1 \
-	|| die "could not update PosterFox's libraries on the VM from Gentoo's binhost (see $LOG)"
+# Runtime libraries only (--with-bdeps=n: the compiler toolchain stays as it is). Asked first: --usepkgonly cannot be
+# used here (it also demands a binary of PosterFox itself), so anything that would COMPILE stops the run by name instead.
+DEPS="--oneshot --update --onlydeps --onlydeps-with-rdeps=y --with-bdeps=n --usepkg --getbinpkg =www-client/$WANT"
+PLAN=$(vm "emerge -p $DEPS" 2>>"$LOG") || die "could not plan PosterFox's library update on the VM (see $LOG)"
+echo "$PLAN" >>"$LOG"
+SRC=$(echo "$PLAN" | grep '^\[ebuild' | sed 's/^\[ebuild[^]]*\] *//; s/ .*//' | tr '\n' ' ')
+[ -z "$SRC" ] || die "updating PosterFox's libraries would compile from source on the VM: $SRC"
+if echo "$PLAN" | grep -q '^\[binary'; then
+	vm "emerge --quiet $DEPS" >>"$LOG" 2>&1 || die "could not update PosterFox's libraries on the VM (see $LOG)"
+fi
 say "building $WANT on the build VM"
 vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*; nice -n 10 emerge --oneshot --buildpkgonly --quiet-build =www-client/$WANT" >>"$LOG" 2>&1 \
 	|| { vm "tail -40 \$(ls -t /var/tmp-build/portage/www-client/posterfox-*/temp/build.log 2>/dev/null | head -1)" >>"$LOG" 2>&1 || true
