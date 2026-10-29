@@ -56,6 +56,8 @@ def test_the_build_is_mozillas_toolchain_with_telemetry_out():
                 "mk_add_options MOZ_DATA_REPORTING=0", "--disable-crashreporter", "--disable-updater"):
         assert opt in sh, opt
     assert subprocess.run(["bash", "-n", str(ROOT / "tools/portable-build.sh")]).returncode == 0
+    # mach must be allowed to fetch the bootstrap's own Python packages (taskcluster): "none" stops configure.
+    assert "MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=pip" in sh and "MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=none" not in sh.replace("NOT Gentoo's MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=none", "")
     rel = (ROOT / "tools/portable-release.sh").read_text()
     assert subprocess.run(["bash", "-n", str(ROOT / "tools/portable-release.sh")]).returncode == 0
     assert "smoke.py" in rel and "RELEASE CHECK FAILED -- nothing published" in rel

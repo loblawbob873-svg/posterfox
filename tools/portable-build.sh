@@ -40,7 +40,9 @@ mk_add_options MOZ_DATA_REPORTING=0
 mk_add_options MOZ_SERVICES_HEALTHREPORT=0
 mk_add_options MOZ_TELEMETRY_REPORTING=0
 MOZ
-export MOZBUILD_STATE_PATH="${MOZBUILD_STATE_PATH:-$HOME/.mozbuild}" MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=none
+# NOT Gentoo's MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=none: the bootstrap needs mach to fetch its own Python packages
+# (taskcluster) -- with "none" configure stops at "No module named taskcluster.exceptions" (measured 2026-10-29).
+export MOZBUILD_STATE_PATH="${MOZBUILD_STATE_PATH:-$HOME/.mozbuild}" MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=pip
 echo "== build $(date +%T)"; nice ./mach --no-interactive build
 echo "== package $(date +%T)"; ./mach package
 PKG=$(ls obj/dist/posterfox-"$PV"*.linux-x86_64.tar.* | head -1)
