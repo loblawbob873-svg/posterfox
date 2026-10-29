@@ -8,7 +8,7 @@
 #
 # Steps, each stopping the run on failure with nothing published:
 #   1. assemble PosterFox's files (tools/assemble.py), as the Gentoo release does;
-#   2. build on the VM as an unprivileged user (tools/portable-build.sh: Mozilla's toolchain and sysroot, ~1-2 h);
+#   2. build on the VM as an unprivileged user (tools/portable-build.sh: Mozilla's toolchain and sysroot, ~40 min, measured 2026-10-29);
 #   3. check it with the release check (tools/smoke.py, the same checks as the Gentoo package);
 #   4. publish posterfox-<PV>-r<REV>-linux-x86_64.tar.xz + .sha256 to the release `v<PV>-r<REV>`, marked latest.
 set -euo pipefail
@@ -44,7 +44,7 @@ vm "rm -rf $IN $OUTD; mkdir -p $IN/tools $OUTD $P; id pfbuild >/dev/null 2>&1 ||
 tar -C "$HERE" -cf - tools/portable-build.sh tools/portable_layout.py tools/smoke.py build/files-posterfox \
 	| vm "tar -C $IN -xf - && chown -R pfbuild $IN $OUTD"
 
-say "build on the VM (1-2 h)"
+say "build on the VM (~40 min)"
 if ! vm "su pfbuild -c 'MOZBUILD_STATE_PATH=$P/.mozbuild bash $IN/tools/portable-build.sh $PV $REV $IN/build/files-posterfox $OUTD'" >>"$LOG" 2>&1; then
 	say "BUILD FAILED -- nothing published (see $LOG)"; exit 1; fi
 
