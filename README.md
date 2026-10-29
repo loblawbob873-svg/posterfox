@@ -13,10 +13,13 @@
   tabs cost what a few do.
 - **Private by default.** No history is kept, everything (cookies, site data, cache, downloads, sessions) is cleared
   when PosterFox closes, and **every tab is its own container**: a login in one tab is invisible to every other tab,
-  and closing the tab deletes its data. Saved passwords are kept.
+  and closing the tab deletes its data. **Strict** tracking protection is on, and Firefox's own DNS over HTTPS is off.
 - **PosterChan AI in the AI sidebar.** Firefox's own AI panel opens your PosterChan instance's AI chat. "Summarize
   this page" and the other prompts land in the box for you to read and send.
-- **Your Firefox profile carries over.** Passwords, bookmarks and history stay where Firefox keeps them.
+- **PosterChan Passwords, not Firefox's.** Firefox's password manager does not save or fill passwords (PosterChan
+  Passwords does); logins an older Firefox profile holds stay readable in about:logins, to move over. Mozilla's own AI
+  features are off too -- the AI sidebar is PosterChan's.
+- **Your Firefox profile carries over.** Bookmarks and history stay where Firefox keeps them.
 
 - **Tor tabs.** Right-click a tab → *New Tor tab*, right-click a link → *Open link in a Tor tab*, or Alt+Shift+T: a
   container whose every request (DNS too) goes through this machine's Tor (SOCKS 9050, or Tor Browser's 9150). With

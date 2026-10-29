@@ -23,6 +23,15 @@ import time
 
 PORT = int(os.environ.get("POSTERFOX_MARIONETTE_PORT", "2829"))
 
+# Firefox's password manager and Mozilla's AI features, off by default (distribution/posterfox-prefs.js): every key the
+# prefs file sets, each checked at its exact value. The AI SIDEBAR stays on -- its provider is PosterChan's AI.
+OURS_OFF = {
+    "signon.rememberSignons": False, "signon.autofillForms": False, "signon.generation.enabled": False,
+    "signon.management.page.breach-alerts.enabled": False, "signon.firefoxRelay.feature": "disabled",
+    "browser.ml.enable": False, "browser.ml.linkPreview.enabled": False, "browser.ml.pageAssist.enabled": False,
+    "browser.tabs.groups.smart.enabled": False, "extensions.ml.enabled": False,
+}
+
 CODECS = {
     "h264": 'video/mp4; codecs="avc1.42E01E"',
     "aac": 'audio/mp4; codecs="mp4a.40.2"',
@@ -94,7 +103,8 @@ return {
     "privacy.clearOnShutdown_v2.historyFormDataAndDownloads", "privacy.clearOnShutdown_v2.cookiesAndStorage",
     "privacy.clearOnShutdown_v2.cache", "privacy.userContext.enabled",
     "toolkit.telemetry.enabled", "datareporting.healthreport.uploadEnabled", "browser.tabs.inTitlebar",
-    "identity.fxaccounts.enabled"].map(k => [k, get(k)])),
+    "identity.fxaccounts.enabled", "browser.contentblocking.category", "network.cookie.cookieBehavior",
+    "privacy.trackingprotection.enabled", "network.trr.mode", "browser.ml.chat.enabled"].concat(PFX_KEYS).map(k => [k, get(k)])),
   chromeCss: css.exists() && sss.sheetRegistered(Services.io.newFileURI(css), sss.USER_SHEET),
   themeFrame: (() => { try { const w = Services.wm.getMostRecentWindow("navigator:browser"); if (!w) return null;
     // Firefox 159 draws a theme's theme_frame on the window's <body>, under a transparent toolbox (measured on the
@@ -107,6 +117,7 @@ return {
   } catch (e) { return { error: String(e) }; } })(),
 };
 """
+CHROME_STATE = CHROME_STATE.replace("PFX_KEYS", json.dumps(sorted(OURS_OFF)))
 CHROME_NEWTAB = r"""
 try { const {AboutNewTab} = ChromeUtils.importESModule("resource:///modules/AboutNewTab.sys.mjs");
   const st = AboutNewTab.activityStream && AboutNewTab.activityStream.store && AboutNewTab.activityStream.store.getState();
@@ -270,6 +281,13 @@ def main(argv):
         need(p.get("privacy.userContext.enabled") is True, "containers are off")
         need(p.get("toolkit.telemetry.enabled") is False, "telemetry is enabled")
         need(p.get("identity.fxaccounts.enabled") is False, "Mozilla accounts (Sync sign-in) are enabled")
+        need(p.get("browser.contentblocking.category") == "strict" and p.get("privacy.trackingprotection.enabled") is True
+             and p.get("network.cookie.cookieBehavior") == 5, "Enhanced Tracking Protection is not Strict (%s)" % p)
+        need("DNSOverHTTPS" in (report.get("policies") or []) and p.get("network.trr.mode") == 5,
+             "Firefox's DNS over HTTPS is not off (network.trr.mode=%r)" % p.get("network.trr.mode"))
+        for k, v in OURS_OFF.items():
+            need(p.get(k) == v, "%s is %r, not %r (Firefox's password manager / Mozilla's AI features must be off)" % (k, p.get(k), v))
+        need(p.get("browser.ml.chat.enabled") is True, "the PosterChan AI sidebar was switched off with them")
         need(report.get("chromeCss") is True, "the PosterChan window stylesheet is not registered")
         tf = report.get("themeFrame") or {}
         need("url(" in (tf.get("frame") or ""), "the PosterChan theme's banner is not on the toolbar (%s)" % tf)
