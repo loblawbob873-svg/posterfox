@@ -188,3 +188,16 @@ def test_window_buttons_like_posterchan_windows():
     ini = (ROOT / "distribution" / "xdg" / "gtk-3.0" / "settings.ini").read_text()
     assert "gtk-decoration-layout=:minimize,maximize,close" in ini
     assert "posterfox/xdg/gtk-3.0" in _gen()
+
+
+def test_private_by_default_no_history_cleared_on_exit_containers_on():
+    p = json.loads((ROOT / "distribution" / "policies.json").read_text())["policies"]
+    s = p["SanitizeOnShutdown"]
+    for k in ("Cache", "Cookies", "Downloads", "FormData", "History", "Sessions", "SiteSettings", "OfflineApps"):
+        assert s[k] is True, k
+    prefs = p["Preferences"]
+    assert prefs["places.history.enabled"]["Value"] is False and prefs["browser.formfill.enable"]["Value"] is False
+    assert prefs["privacy.userContext.enabled"]["Value"] is True
+    # containers do not work in permanent private browsing, so that mode must stay off
+    assert "browser.privatebrowsing.autostart" not in prefs
+    assert 'pref("places.history.enabled", false);' in (ROOT / "distribution" / "posterfox-prefs.js").read_text()
