@@ -53,6 +53,7 @@ fi
 
 # ---------------------------------------------------------------- 2. the overlay, deployed
 PKG="$PCAI/os/overlay/www-client/posterfox"
+vm_has() { vm "emaint sync -r posterchan >/dev/null 2>&1; test -f /var/db/repos/posterchan/www-client/posterfox/$WANT.ebuild"; }
 if [ ! -f "$PKG/$WANT.ebuild" ]; then
 	[ -z "$(git -C "$PCAI" status --porcelain --untracked-files=no)" ] || die "posterchanai has uncommitted changes -- not touching it"
 	PYTHON="$PY" "$HERE/tools/update.sh" --gentoo "$TREE/firefox" --posterchanai "$PCAI" >>"$LOG" 2>&1 \
@@ -63,16 +64,18 @@ if [ ! -f "$PKG/$WANT.ebuild" ]; then
 		|| die "the overlay checks refused the new ebuild (see $LOG)"
 	git -C "$PCAI" add os/overlay/www-client/posterfox
 	git -C "$PCAI" commit -q -m "www-client/posterfox: $WANT (posterfox/tools/release.sh)" -- os/overlay/www-client/posterfox
+fi
+# Committed is not published: the VM (like every machine) only sees what a deploy pushed to the overlay.
+if ! vm_has; then
 	say "deploying the overlay (sync.sh, full gate)"
 	( cd "$PCAI" && systemd-run --user --scope -q -p MemoryHigh=24G -p MemoryMax=30G env PC_GATE_JOBS=6 ./sync.sh ) >>"$LOG" 2>&1 \
 		|| die "the deploy did not pass (see $LOG) -- nothing published"
 	git -C "$PCAI" push -q github master:main >>"$LOG" 2>&1 || say "warning: the github mirror push failed"
+	vm_has || die "deployed, but the VM's overlay still has no $WANT.ebuild"
 fi
 
 # ---------------------------------------------------------------- 3. build on the VM
 say "building $WANT on the build VM"
-vm "emaint sync -r posterchan >/dev/null 2>&1; test -f /var/db/repos/posterchan/www-client/posterfox/$WANT.ebuild" \
-	|| die "the VM's overlay has no $WANT.ebuild (was the overlay published?)"
 vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*; nice -n 10 emerge --oneshot --buildpkgonly --quiet-build =www-client/$WANT" >>"$LOG" 2>&1 \
 	|| { vm "tail -40 \$(ls -t /var/tmp-build/portage/www-client/posterfox-*/temp/build.log 2>/dev/null | head -1)" >>"$LOG" 2>&1 || true
 	     die "the build failed on the VM (tail in $LOG)"; }
