@@ -178,3 +178,15 @@ def test_a_new_tab_that_finishes_blank_is_moved():
       await finish(t.id, 'about:newtab'); await tick();""")
     assert r["out"]["waited"], "a tab still loading was moved before it was known to be blank"
     assert len(r["tabs"]) == 1 and r["tabs"][0]["cookieStoreId"] != "firefox-default", r["tabs"]
+
+
+@pytest.mark.parametrize("page", ["about:preferences", "moz-extension://ublock-id/dashboard.html", "about:addons"])
+@pytest.mark.parametrize("reported", ["complete", "loading"])
+def test_settings_and_add_on_pages_open_and_are_never_replaced_by_an_empty_tab(page, reported):
+    """"ublock dashboard is not opening in posterfox, It just opens in a new container tab" and "firefox settings also
+    does not open up ... just shows a new tab" (2026-10-29): the tab Firefox opens for them starts as about:blank -- and
+    may say it has FINISHED as about:blank -- before it loads the page. That tab was replaced by an empty container tab."""
+    r = run([], [], """
+      const t = await browser.tabs.create({ status: %s, url: 'about:blank' }); await tick();
+      await finish(t.id, %s); await new Promise(r => setTimeout(r, 1700));""" % (json.dumps(reported), json.dumps(page)))
+    assert [t["url"] for t in r["tabs"]] == [page], ("the page was replaced, or a spare tab was opened", r["tabs"])

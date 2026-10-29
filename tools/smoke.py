@@ -102,6 +102,13 @@ return {
              frame: w.getComputedStyle(box).backgroundImage }; } catch (e) { return { error: String(e) }; } })(),
 };
 """
+CHROME_NEWTAB = r"""
+try { const {AboutNewTab} = ChromeUtils.importESModule("resource:///modules/AboutNewTab.sys.mjs");
+  const st = AboutNewTab.activityStream && AboutNewTab.activityStream.store && AboutNewTab.activityStream.store.getState();
+  return st && st.TopSites && st.TopSites.initialized ? st.TopSites.rows.map(r => r.url) : null;
+} catch (e) { return null; }
+"""
+NEWTAB = ["https://poster.place/", "/posterchanai", "/posterfox", "addons.mozilla.org/firefox/addon/posterchan-passwords/"]
 CHROME_ADDONS = r"""
 const done = arguments[arguments.length - 1];
 const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
@@ -165,6 +172,12 @@ def main(argv):
             report["startup"] = m.js(CHROME_TABS)
             report["addons"] = m.js(CHROME_ADDONS, asynchronous=True)
             report["containers"] = m.js(CHROME_CONTAINERS, asynchronous=True)
+            report["newtab"] = None
+            for _ in range(20):                               # the new tab's feed initialises a moment after start
+                report["newtab"] = m.js(CHROME_NEWTAB)
+                if report["newtab"]:
+                    break
+                time.sleep(1)
             m.cmd("Marionette:SetContext", {"value": "content"})
             m.cmd("WebDriver:Navigate", {"url": "data:text/html,<title>codecs</title><video></video>"})
             report["codecs"] = m.js("const v=document.createElement('video');return Object.fromEntries(Object.entries(arguments[0]).map(([k,t])=>[k,v.canPlayType(t)]));", [CODECS])
@@ -203,6 +216,9 @@ def main(argv):
         ads = {a["id"]: a for a in report.get("addons") or [] if isinstance(a, dict)}
         for aid, name in ADDONS.items():
             need(aid in ads and ads[aid]["active"], name + " is missing or disabled")
+        tiles = report.get("newtab") or []
+        need(len(tiles) == len(NEWTAB) and all(any(t.endswith(w) or w in t for t in tiles) for w in NEWTAB),
+             "the new tab's shortcuts are not PosterChan's (%s)" % tiles)
         st = report.get("startup") or {}
         first = st.get("tabs") or []
         need(len(first) == 1 and first[0]["url"] == link,

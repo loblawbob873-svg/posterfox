@@ -305,3 +305,20 @@ def test_every_easylist_is_on_in_ublock():
     assert easy <= set(on), easy - set(on)
     defaults = {k for k, v in assets.items() if v.get("content") == "filters" and not v.get("off") and v.get("group") != "regions"}
     assert defaults <= set(on) and "user-filters" in on, defaults - set(on)
+
+
+def test_the_new_tab_shortcuts_are_posterchans():
+    """"remove the wikipedia, youtube, reddit and add-ons links on new tab page and replace it with posterchan git,
+    poster.place, posterfox git page, posterchan passwords extension page" (2026-10-29). Mozilla's remote defaults off,
+    the four pinned with names; the release check reads the rendered list from Firefox itself (measured: without these
+    prefs Firefox shows Wikipedia, YouTube, Reddit, Add-ons for Firefox)."""
+    import re
+    prefs = (ROOT / "distribution" / "posterfox-prefs.js").read_text()
+    assert 'pref("browser.topsites.useRemoteSetting", false);' in prefs
+    pinned = json.loads(json.loads(re.search(r'pref\("browser\.newtabpage\.pinned", (".*")\);', prefs).group(1)))
+    assert [p["label"] for p in pinned] == ["poster.place", "PosterChan Git", "PosterFox Git", "PosterChan Passwords"]
+    urls = [p["url"] for p in pinned]
+    assert urls[0] == "https://poster.place/" and urls[1].endswith("/posterchanai") and urls[2].endswith("/posterfox")
+    assert urls[3] == "https://addons.mozilla.org/firefox/addon/posterchan-passwords/"
+    assert re.search(r'default\.sites", "([^"]*)"', prefs).group(1).split(",") == urls
+    assert "the new tab's shortcuts are not PosterChan's" in (ROOT / "tools" / "smoke.py").read_text()

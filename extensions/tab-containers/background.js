@@ -39,9 +39,9 @@
    * because an add-on cannot open those addresses itself and losing the page is worse than sharing a store for it. */
   const waiting = new Set();
   function consider(tab) {
-    if (!C.shouldMoveNewTab(tab)) return;
-    if (tab.status === 'loading') { waiting.add(tab.id); return; }
-    replace(tab, '');
+    if (!C.mightBeNew(tab)) return;
+    if (C.shouldMoveNewTab(tab)) { replace(tab, ''); return; }
+    waiting.add(tab.id);                         // about:blank, or still loading: judged when it finishes (below)
   }
   browser.tabs.onCreated.addListener(consider);
   browser.tabs.onUpdated.addListener((id, info, tab) => {

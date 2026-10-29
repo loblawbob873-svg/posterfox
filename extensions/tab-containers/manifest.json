@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "PosterFox Tab Containers",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Every tab is its own temporary container (its own cookies and storage, deleted when the tab closes), and tabs left alone for two minutes go to sleep.",
   "browser_specific_settings": {
     "gecko": {
