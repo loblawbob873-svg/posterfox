@@ -79,6 +79,27 @@ be on disk: a Firefox build does not fit in a RAM tmpfs.
 
 The result is `/var/cache/binpkgs/www-client/posterfox/posterfox-<ver>-r<rev>-1.gpkg.tar`.
 
+## Releasing (automatic)
+
+`tools/release.sh` is the whole update: it works out which PosterFox should be published (newest Firefox in the
+build VM's tree, this repo's `REVISION`), and if the binhost does not already serve exactly that it regenerates the
+overlay package, deploys it with `sync.sh`, builds it on the VM (`--buildpkgonly`, distcc), signs it here, rebuilds
+the binhost index and publishes it. It stops at the first failure with nothing half-published; the log is
+`~/.cache/posterfox/release.log`. `--dry-run` says what it would do.
+
+It runs daily from a user timer on server1:
+
+```
+cp tools/posterfox-release.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now posterfox-release.timer
+```
+
+So a new Firefox release reaches PosterChanOS machines within a day of Gentoo packaging it, with no hands. A change
+to PosterFox itself: edit, run the tests, bump `REVISION`, commit -- the next run releases it (or run it now).
+
+The signing key was made once by `tools/binhost-setup.sh`. It lives only in `~/.config/posterfox/gnupg` on server1;
+the public half is `keys/posterchanos-binpkgs.asc` (fingerprint in `keys/posterchanos-binpkgs.fpr`).
+
 ## Publishing
 
 The binary packages are served from the PosterChan binhost, signed. Installed machines verify the signature before

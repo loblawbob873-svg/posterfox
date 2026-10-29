@@ -1,0 +1,10 @@
+[Unit]
+Description=PosterFox: daily release check
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=20m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

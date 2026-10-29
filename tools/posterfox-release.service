@@ -1,0 +1,7 @@
+[Unit]
+Description=PosterFox: build and publish a new release when Firefox or PosterFox changed
+
+[Service]
+Type=oneshot
+ExecStart=%h/posterfox/tools/release.sh
+Nice=10
