@@ -35,9 +35,12 @@ ac_add_options --with-unsigned-addon-scopes=app,system
 ac_add_options --allow-addon-sideload
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj
 # MEMORY: the first build was killed by the VM's OOM killer linking gkrust (rustc at 12.6 GB beside the C++ jobs,
-# 2026-10-29). Link-time optimisation off, as Gentoo's own build has it, and fewer jobs at once.
+# 2026-10-29). Link-time optimisation off, as Gentoo's own build has it, and fewer jobs at once. That was not enough:
+# the second build's rustc reached 15 GB on the 19 GB VM compiling gkrust with full debug info (-C debuginfo=2), so
+# debug symbols are off too -- again as Gentoo's package builds it without USE=debug.
 ac_add_options --disable-lto
-mk_add_options MOZ_PARALLEL_BUILD=6
+ac_add_options --disable-debug-symbols
+mk_add_options MOZ_PARALLEL_BUILD=4
 # Telemetry compiled OUT, exactly as the Gentoo package does it (its -telemetry settings).
 mk_add_options MOZ_CRASHREPORTER=0
 mk_add_options MOZ_DATA_REPORTING=0
