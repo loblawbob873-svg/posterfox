@@ -16,8 +16,8 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node")
 
 HARNESS = r"""
 const fs = require('fs'), vm = require('vm');
-const state = { tabs: SEED_TABS, ids: SEED_IDS, nextTab: 100, nextId: 1, removedIds: [] };
-const L = { req: null, created: null, removed: null, updated: null };
+const state = { tabs: SEED_TABS, ids: SEED_IDS, nextTab: 100, nextId: 1, removedIds: [], scripts: [], unregistered: [] };
+const L = { req: null, created: null, removed: null, updated: null, headers: null };
 // A tab finishes loading: its address is now `url`, as the browser reports it.
 const finish = async (id, url) => { const t = state.tabs.find(t => t.id === id); if (!t) return; t.url = url; t.status = 'complete';
                                     if (L.updated) L.updated(id, { status: 'complete' }, t); };
@@ -38,16 +38,20 @@ const browser = {
     onCreated: { addListener: f => { L.created = f; } },
     onRemoved: { addListener: f => { L.removed = f; } },
   },
-  webRequest: { onBeforeRequest: { addListener: f => { L.req = f; } } },
+  webRequest: { onBeforeRequest: { addListener: f => { L.req = f; } }, onBeforeSendHeaders: { addListener: f => { L.headers = f; } } },
+  contentScripts: { register: async o => { state.scripts.push({ store: o.cookieStoreId, code: o.js[0].code, runAt: o.runAt, allFrames: o.allFrames });
+                                         return { unregister: () => state.unregistered.push(o.cookieStoreId) }; } },
 };
-const ctx = vm.createContext({ browser, console, Set, Promise, parseInt, setTimeout });
-vm.runInContext(['containers.js', 'tor.js', 'background.js'].map(f => fs.readFileSync(EXT + '/' + f, 'utf8')).join('\n'), ctx);
+const ctx = vm.createContext({ browser, console, Set, Map, Promise, parseInt, setTimeout, JSON, Math, Object, Date,
+                               navigator: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:159.0) Gecko/20100101 Firefox/159.0' } });
+vm.runInContext(['containers.js', 'tor.js', 'useragent.js', 'background.js'].map(f => fs.readFileSync(EXT + '/' + f, 'utf8')).join('\n'), ctx);
 const tick = () => new Promise(r => setTimeout(r, 20));
 (async () => {
   await tick();
   const out = {};
   STEPS
-  console.log(JSON.stringify({ out, tabs: state.tabs, ids: state.ids.map(i => i.cookieStoreId), removed: state.removedIds }));
+  console.log(JSON.stringify({ out, tabs: state.tabs, ids: state.ids.map(i => i.cookieStoreId), removed: state.removedIds,
+                               scripts: state.scripts, unregistered: state.unregistered }));
 })();
 """
 

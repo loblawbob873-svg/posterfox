@@ -6,12 +6,14 @@
   let n = 0;
 
   const tor = new Set();            // the ones that are Tor tabs (tor.js): their requests go through Tor
+  const agent = PFAgent.install();  // each container's browser identity (useragent.js)
   async function fresh(isTor) {
     const id = await browser.contextualIdentities.create(isTor
       ? { name: PFTor.NAME + ' ' + (++n), color: 'purple', icon: 'fingerprint' }
       : { name: C.NAME + ' ' + (++n), color: C.colorFor(n), icon: 'circle' });
     ours.add(id.cookieStoreId);
     if (isTor) tor.add(id.cookieStoreId);
+    await agent.assign(id.cookieStoreId, isTor);   // before the tab opens: its first request already carries it
     return id.cookieStoreId;
   }
 
@@ -19,7 +21,7 @@
   // A Tor container made anywhere (another window of this profile, the release check) is a Tor container here too.
   if (browser.contextualIdentities.onCreated) browser.contextualIdentities.onCreated.addListener(info => {
     const c = info && info.contextualIdentity;
-    if (c && PFTor.isTorName(c.name)) { ours.add(c.cookieStoreId); tor.add(c.cookieStoreId); }
+    if (c && PFTor.isTorName(c.name)) { ours.add(c.cookieStoreId); tor.add(c.cookieStoreId); agent.assign(c.cookieStoreId, true); }
   });
   if (browser.proxy && browser.proxy.onRequest)
     browser.proxy.onRequest.addListener(details => PFTor.route(details, tor), { urls: ['<all_urls>'] });
@@ -98,7 +100,7 @@
     const tabs = await browser.tabs.query({});
     const used = new Set(tabs.map(t => t.cookieStoreId));
     for (const store of [...ours]) {
-      if (!used.has(store)) { ours.delete(store); tor.delete(store); browser.contextualIdentities.remove(store).catch(() => {}); }
+      if (!used.has(store)) { ours.delete(store); tor.delete(store); agent.release(store); browser.contextualIdentities.remove(store).catch(() => {}); }
     }
   });
 
@@ -110,7 +112,7 @@
       const isTor = PFTor.isTorName(id.name);
       if (!isTor && !id.name.startsWith(C.NAME + ' ')) continue;
       const base = isTor ? PFTor.NAME : C.NAME;
-      if (used.has(id.cookieStoreId)) { ours.add(id.cookieStoreId); if (isTor) tor.add(id.cookieStoreId);
+      if (used.has(id.cookieStoreId)) { ours.add(id.cookieStoreId); if (isTor) tor.add(id.cookieStoreId); agent.assign(id.cookieStoreId, isTor);
         n = Math.max(n, parseInt(id.name.slice(base.length + 1), 10) || 0); }
       else browser.contextualIdentities.remove(id.cookieStoreId).catch(() => {});
     }
