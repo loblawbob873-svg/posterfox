@@ -108,7 +108,10 @@ if echo "$PLAN" | grep -q '^\[binary'; then
 	vm "emerge --quiet $DEPS" >>"$LOG" 2>&1 || die "could not update PosterFox's libraries on the VM (see $LOG)"
 fi
 say "building $WANT on the build VM"
-vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*; nice -n 10 emerge --oneshot --buildpkgonly --quiet-build =www-client/$WANT" >>"$LOG" 2>&1 \
+# The build settings travel ON THIS COMMAND LINE, never in the VM's /etc/portage: the VM's disk becomes the ISO, so a
+# package.env entry there shipped to every machine installed from it (found in the 2026-10-29 ISO, with a distcc host
+# list naming this LAN). The tree goes to /var/tmp-build (on disk; /var/tmp is a RAM tmpfs), which livecd excludes.
+vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*; PORTAGE_TMPDIR=/var/tmp-build MAKEOPTS=\"-j\$(nproc) -l\$(nproc)\" nice -n 10 emerge --oneshot --buildpkgonly --quiet-build =www-client/$WANT" >>"$LOG" 2>&1 \
 	|| { vm "tail -40 \$(ls -t /var/tmp-build/portage/www-client/posterfox-*/temp/build.log 2>/dev/null | head -1)" >>"$LOG" 2>&1 || true
 	     die "the build failed on the VM (tail in $LOG)"; }
 GPKG=$(vm "ls -t /var/cache/binpkgs/www-client/posterfox/$WANT-*.gpkg.tar 2>/dev/null | head -1")
@@ -126,9 +129,10 @@ vm "rm -rf $SMOKE && mkdir -p $SMOKE/pkg $SMOKE/root && tar -xf '$GPKG' -C $SMOK
 	|| die "could not unpack the built package on the VM to check it (see $LOG)"
 vm "cat > $SMOKE/smoke.py" <"$HERE/tools/smoke.py"
 if ! vm "su posterfoxtest -c 'cd /tmp && timeout 300 python3 $SMOKE/smoke.py $SMOKE/root/image/usr/lib64/posterfox/posterfox'" >>"$LOG" 2>&1; then
-	vm "rm -rf $SMOKE"; die "the built browser failed its checks (the report is in $LOG) -- nothing published"
+	vm "rm -rf $SMOKE; userdel -r posterfoxtest 2>/dev/null"; die "the built browser failed its checks (the report is in $LOG) -- nothing published"
 fi
-vm "rm -rf $SMOKE"
+# The check's user goes again: the VM's disk becomes the ISO, and an account left here ships to every installed machine.
+vm "rm -rf $SMOKE; userdel -r posterfoxtest 2>/dev/null; true"
 
 # ---------------------------------------------------------------- 4. sign, index, publish
 mkdir -p "$STAGE/www-client/posterfox"

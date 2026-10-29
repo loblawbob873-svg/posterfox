@@ -194,21 +194,16 @@ PosterChanOS machines  (gentoo.sh: binrepos entry + the public key)   <-- NOT YE
 that builds the PosterChanOS ISOs. It is a PosterChanOS install, so a package built there matches installed
 machines: the same profile, USE flags, CHOST and `-march=x86-64-v3`. Its PosterFox settings:
 
-- `/etc/portage/package.env` → `www-client/posterfox posterfox-build.conf`
-- `/etc/portage/env/posterfox-build.conf`: `PORTAGE_TMPDIR="/var/tmp-build"` (about 40 GB, **on disk**; `/var/tmp`
-  is a RAM tmpfs), `FEATURES="distcc"`, `MAKEOPTS="-j30 -l12"`
-- `/etc/portage/package.accept_keywords/posterfox`: `www-client/posterfox ~amd64`
-- `/etc/distcc/hosts`: `192.168.0.85/12 192.168.0.2/12 localhost/10`. The original is kept as
-  `hosts.orig-before-posterfox`. `sys-devel/distcc` is installed there with `--oneshot`.
+- **Nothing else.** The VM's disk becomes the ISO, so it holds no PosterFox build configuration at all: `release.sh`
+  passes `PORTAGE_TMPDIR=/var/tmp-build` and `MAKEOPTS` on its own `emerge` line, deletes the build tree and the browser
+  check's `posterfoxtest` account when it is done, and `gentoo.sh livecd` excludes `/var/tmp-build`. (A package.env
+  entry and a distcc host list naming this LAN were found inside the 2026-10-29 ISO before it was published; both were
+  removed and the ISO rebuilt.) `/etc/portage/package.accept_keywords/posterfox` stays: every PosterChanOS machine
+  has it.
 
-**distcc.** It is Portage's own setup (`FEATURES=distcc`), nothing custom.
-- nas.lan's distccd also accepts the VM's NAT subnet, via the drop-in
-  `/etc/systemd/system/distccd.service.d/posterfox-vm.conf` (`--allow 192.168.122.0/24`).
-- **Measured 2026-10-29: distcc does not distribute this build at all.** During the C++ compile the VM ran clang itself
-  and there were no distcc processes. Firefox's build calls clang by its absolute path, which bypasses Portage's distcc
-  wrapper directory. Making it work needs an allowed-commands list (`DISTCC_CMDLIST`) on every distcc server, which was
-  decided against. The whole compile takes about 18 minutes on the VM alone, so nothing more is needed. Rust never
-  distributes anyway.
+**distcc is not used.** Measured 2026-10-29: Firefox's build calls clang by its absolute path, which bypasses Portage's
+distcc wrapper, so no work left the VM. The compile takes about 18 minutes on the VM's own cores. distcc was removed
+from the VM and nas.lan's `posterfox-vm.conf` drop-in can go too.
 
 **The signing key** was made once by `tools/binhost-setup.sh`.
 - Fingerprint `7B690AA70C09AD1AD7748CF5B6F8DA9DDF2EF936`; the public half is `keys/posterchanos-binpkgs.asc`.
