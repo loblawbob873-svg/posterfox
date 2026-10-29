@@ -33,6 +33,7 @@ CODECS = {
     "mp3": "audio/mpeg",
 }
 ADDONS = {"uBlock0@raymondhill.net": "uBlock Origin", "jid1-MnnxcxisBPnSXQ@jetpack": "Privacy Badger",
+          "passwords@poster.place": "PosterChan Passwords",
           "tab-containers@posterfox.poster.place": "tab containers", "cyberpunk-theme@poster.place": "cyberpunk theme"}
 
 
@@ -92,7 +93,8 @@ return {
   prefs: Object.fromEntries(["places.history.enabled", "browser.formfill.enable", "privacy.sanitize.sanitizeOnShutdown",
     "privacy.clearOnShutdown_v2.historyFormDataAndDownloads", "privacy.clearOnShutdown_v2.cookiesAndStorage",
     "privacy.clearOnShutdown_v2.cache", "privacy.userContext.enabled",
-    "toolkit.telemetry.enabled", "datareporting.healthreport.uploadEnabled", "browser.tabs.inTitlebar"].map(k => [k, get(k)])),
+    "toolkit.telemetry.enabled", "datareporting.healthreport.uploadEnabled", "browser.tabs.inTitlebar",
+    "identity.fxaccounts.enabled"].map(k => [k, get(k)])),
   chromeCss: css.exists() && sss.sheetRegistered(Services.io.newFileURI(css), sss.USER_SHEET),
 };
 """
@@ -181,11 +183,14 @@ def main(argv):
         need(report.get("brand") == "PosterFox", "branding (brandShortName is %r)" % report.get("brand"))
         need(report.get("telemetryBuilt") is False, "telemetry is compiled in")
         need(report.get("policiesActive"), "enterprise policies are not active")
+        need("DisableFirefoxAccounts" in (report.get("policies") or []), "Mozilla accounts are not disabled by policy")
         p = report.get("prefs", {})
         need(p.get("places.history.enabled") is False, "history is remembered")
         need(p.get("browser.formfill.enable") is False, "form history is remembered")
         need(p.get("privacy.sanitize.sanitizeOnShutdown") is True, "data is not cleared on exit")
         need(p.get("privacy.userContext.enabled") is True, "containers are off")
+        need(p.get("toolkit.telemetry.enabled") is False, "telemetry is enabled")
+        need(p.get("identity.fxaccounts.enabled") is False, "Mozilla accounts (Sync sign-in) are enabled")
         need(report.get("chromeCss") is True, "the PosterChan window stylesheet is not registered")
         ads = {a["id"]: a for a in report.get("addons") or [] if isinstance(a, dict)}
         for aid, name in ADDONS.items():

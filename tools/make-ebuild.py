@@ -71,6 +71,9 @@ posterfox_distribution() {
 	insinto "${MOZILLA_FIVE_HOME}/distribution/extensions"
 	newins "${DISTDIR}/posterfox-ublock0-${POSTERFOX_UBO}.xpi" uBlock0@raymondhill.net.xpi
 	newins "${DISTDIR}/posterfox-privacybadger-${POSTERFOX_PB}.xpi" jid1-MnnxcxisBPnSXQ@jetpack.xpi
+	# PosterChan's own add-on (passwords, bookmarks, the NIP-07 signer), AMO-signed like the two above, so AMO keeps it
+	# current between browser releases.
+	newins "${DISTDIR}/posterfox-posterchan-${POSTERFOX_PCP}.xpi" passwords@poster.place.xpi
 	# PosterChan's own add-ons live in the APPLICATION scope, unsigned (this build allows app,system), so they
 	# update with the browser and need no addons.mozilla.org round trip.
 	insinto "${MOZILLA_FIVE_HOME}/browser/extensions"
@@ -96,14 +99,16 @@ posterfox_distribution() {
 def transform(src: str, rev: int) -> str:
     t = src
     t = sub(t, 'MOZ_ESR=\n', f'MOZ_ESR=\n\n# PosterFox pins (posterfox/pins.json)\nPOSTERFOX_UBO="{PINS["ublock_origin"]}"\n'
-            f'POSTERFOX_PB="{PINS["privacy_badger"]}"\nPOSTERFOX_PB_AMO="{PINS["privacy_badger_amo_file"]}"\n',
+            f'POSTERFOX_PB="{PINS["privacy_badger"]}"\nPOSTERFOX_PB_AMO="{PINS["privacy_badger_amo_file"]}"\n'
+            f'POSTERFOX_PCP="{PINS["posterchan_passwords"]}"\nPOSTERFOX_PCP_AMO="{PINS["posterchan_passwords_amo_file"]}"\n',
             what="pins after MOZ_ESR")
     t = sub(t, 'MOZ_PN="${PN%-bin}"', 'MOZ_PN="firefox"', what="MOZ_PN")
     t = resub(t, r'^DESCRIPTION=".*"$', 'DESCRIPTION="PosterFox: Firefox for PosterChanOS -- PosterChan look, uBlock Origin, no telemetry"',
               "DESCRIPTION")
     t = sub(t, '\t${PATCH_URIS[@]}\n',
             '\t${PATCH_URIS[@]}\n\thttps://github.com/gorhill/uBlock/releases/download/${POSTERFOX_UBO}/uBlock0_${POSTERFOX_UBO}.firefox.signed.xpi -> posterfox-ublock0-${POSTERFOX_UBO}.xpi\n'
-            '\thttps://addons.mozilla.org/firefox/downloads/file/${POSTERFOX_PB_AMO}/privacy_badger17-${POSTERFOX_PB}.xpi -> posterfox-privacybadger-${POSTERFOX_PB}.xpi\n',
+            '\thttps://addons.mozilla.org/firefox/downloads/file/${POSTERFOX_PB_AMO}/privacy_badger17-${POSTERFOX_PB}.xpi -> posterfox-privacybadger-${POSTERFOX_PB}.xpi\n'
+            '\thttps://addons.mozilla.org/firefox/downloads/file/${POSTERFOX_PCP_AMO}/posterchan_passwords-${POSTERFOX_PCP}.xpi -> posterfox-posterchan-${POSTERFOX_PCP}.xpi\n',
             what="SRC_URI uBlock")
     t = sub(t, 'S="${WORKDIR}/${PN}-${PV%_*}"', 'S="${WORKDIR}/${MOZ_PN}-${PV%_*}"', what="S")
     # PosterChanOS runs stable: a system library newer than its tree has is replaced by Firefox's bundled copy.

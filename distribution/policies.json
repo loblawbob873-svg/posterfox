@@ -1,6 +1,7 @@
 {
   "policies": {
     "DisableTelemetry": true,
+    "DisableFirefoxAccounts": true,
     "DisableFirefoxStudies": true,
     "DisablePocket": true,
     "DisableFeedbackCommands": true,
@@ -31,6 +32,11 @@
       "jid1-MnnxcxisBPnSXQ@jetpack": {
         "installation_mode": "force_installed",
         "install_url": "file:///usr/lib64/posterfox/distribution/extensions/jid1-MnnxcxisBPnSXQ@jetpack.xpi",
+        "private_browsing": true
+      },
+      "passwords@poster.place": {
+        "installation_mode": "force_installed",
+        "install_url": "file:///usr/lib64/posterfox/distribution/extensions/passwords@poster.place.xpi",
         "private_browsing": true
       }
     },

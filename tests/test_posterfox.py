@@ -181,6 +181,33 @@ def test_privacy_badger_is_fetched_pinned_and_forced_like_ublock():
     assert pol["jid1-MnnxcxisBPnSXQ@jetpack"]["installation_mode"] == "force_installed"
 
 
+def test_the_posterchan_extension_is_fetched_pinned_and_forced():
+    """"posterfox is missing the most important part, the posterchan extension" (2026-10-29)."""
+    t = _gen()
+    pins = json.loads((ROOT / "pins.json").read_text())
+    assert 'POSTERFOX_PCP="%s"' % pins["posterchan_passwords"] in t
+    assert ("addons.mozilla.org/firefox/downloads/file/${POSTERFOX_PCP_AMO}/posterchan_passwords-${POSTERFOX_PCP}.xpi"
+            " -> posterfox-posterchan-${POSTERFOX_PCP}.xpi") in t
+    assert 'posterfox-posterchan-${POSTERFOX_PCP}.xpi" passwords@poster.place.xpi' in t
+    pol = json.loads((ROOT / "distribution" / "policies.json").read_text())["policies"]["ExtensionSettings"]
+    assert pol["passwords@poster.place"]["installation_mode"] == "force_installed"
+    assert pol["passwords@poster.place"]["install_url"].endswith("/distribution/extensions/passwords@poster.place.xpi")
+    from tools import smoke
+    assert "passwords@poster.place" in smoke.ADDONS
+
+
+def test_no_telemetry_and_no_mozilla_account():
+    """"i want telemetry out of this and mozilla account spyware" (2026-10-29). Telemetry is compiled out (the USE
+    flag is removed and every `use telemetry` reads false); Mozilla accounts and Sync are switched off by policy, and
+    the release smoke test refuses a build where either is on."""
+    t = _gen()
+    assert "+telemetry" not in t and not re.search(r"\buse telemetry\b", t)
+    pol = json.loads((ROOT / "distribution" / "policies.json").read_text())["policies"]
+    assert pol["DisableTelemetry"] is True and pol["DisableFirefoxAccounts"] is True
+    smoke_src = (ROOT / "tools" / "smoke.py").read_text()
+    assert '"identity.fxaccounts.enabled"' in smoke_src and "Mozilla accounts" in smoke_src
+
+
 def test_window_buttons_like_posterchan_windows():
     w = ME.wrapper((FIX / "firefox-files" / "firefox-r1.sh").read_text())
     assert 'export XDG_CONFIG_DIRS="${MOZILLA_FIVE_HOME}/posterchan/xdg' in w

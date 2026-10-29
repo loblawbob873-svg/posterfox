@@ -27,7 +27,7 @@ stopped and told you why.
 | **No telemetry, compiled out** | generator | The `telemetry` USE flag is removed and every `use telemetry` reads false. The result is `MOZ_TELEMETRY_REPORTING=0`, `MOZ_DATA_REPORTING=0`, `MOZ_SERVICES_HEALTHREPORT=0` and `MOZ_CRASHREPORTER=0`, plus Gentoo's telemetry prefs. |
 | **Private by default** | `distribution/policies.json`, `distribution/posterfox-prefs.js` | No history and no form history. `SanitizeOnShutdown` clears cookies, site data, cache, downloads, sessions and site settings on exit. Saved passwords are kept. This is **not** permanent private browsing, because containers do not work in private browsing. |
 | **Every tab its own container** | `extensions/tab-containers/` | A built-in add-on. A page loading in a tab is reopened in a fresh container in the same place, and the container is deleted (cookies and storage too) when its tab closes. Containers the person makes are never touched. |
-| uBlock Origin, Privacy Badger | `pins.json`, `distribution/policies.json` | AMO-signed releases fetched by `SRC_URI` (pinned versions, Manifest-hashed) and force-installed by policy. |
+| uBlock Origin, Privacy Badger, PosterChan Passwords | `pins.json`, `distribution/policies.json` | AMO-signed releases fetched by `SRC_URI` (pinned versions, Manifest-hashed) and force-installed by policy. |
 | Cyberpunk theme | `posterchanai/os/firefox-theme` | Built **unsigned** into the application scope (`browser/extensions/`). This build allows that (`--with-unsigned-addon-scopes=app,system`). It is the default theme. |
 | **Looks like a PosterChan window** | `distribution/posterfox-chrome.css` | Uses the desktop's own values: the title bar (tab strip) in `--panel2`, the theme's violet toolbar, and the selected tab in the focused-window neon ring. The stylesheet carries the theme's colours itself, so the look does not depend on the theme add-on loading. It is registered by the autoconfig and scoped to `browser.xhtml`, never to web pages. |
 | Window buttons like PosterChan windows | `distribution/xdg/gtk-3.0/settings.ini` | `gtk-decoration-layout=:minimize,maximize,close`. The `posterfox` launcher puts that folder first in `XDG_CONFIG_DIRS`. GTK's default layout gives Firefox a close button only. The person's own `~/.config/gtk-3.0` still wins. |
@@ -66,9 +66,9 @@ PosterFox policy.
    VM's own cores (see "distcc" below).
 4. **Checks the built browser** before anyone gets it. `tools/smoke.py` unpacks the built package on the VM and starts
    it headless as an ordinary user, then asks it over Marionette (Firefox's own remote protocol):
-   - its name is PosterFox and telemetry is compiled out;
+   - its name is PosterFox, telemetry is compiled out and off, and Mozilla accounts are disabled;
    - the enterprise policies are active;
-   - uBlock Origin, Privacy Badger, the tab-container add-on and the cyberpunk theme are enabled;
+   - uBlock Origin, Privacy Badger, PosterChan Passwords, the tab-container add-on and the cyberpunk theme are enabled;
    - history and form history are off, and data is cleared on exit;
    - the PosterChan window stylesheet is registered;
    - H.264, AAC, VP9, AV1, Opus, FLAC and MP3 can play;
