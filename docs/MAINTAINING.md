@@ -1,132 +1,284 @@
 # Maintaining PosterFox
 
-PosterFox is Firefox, built from Mozilla's own source the way Gentoo builds it, with a short list of changes on top.
-It has no fork of Firefox's source and no patch queue. Keeping it that way is what keeps maintenance cheap: every
-PosterFox change is either a file this repository adds, or one of a dozen exact edits to Gentoo's own Firefox ebuild.
+PosterFox is Firefox for PosterChanOS. It is built from **Mozilla's own source, the way Gentoo builds it**, plus a
+short list of PosterChan changes. There is no fork of Firefox's source code and no patch queue to rebase. Every
+PosterFox change is one of two things:
 
-## What PosterFox changes
+- a **file this repository adds**: branding, prefs, policies, add-ons, the window stylesheet;
+- one of about twenty **exact edits to Gentoo's own Firefox ebuild**, made by `tools/make-ebuild.py`.
 
-| Change | Where | How |
+That is what keeps it cheap to maintain. Gentoo's Firefox maintainers do the hard work for every Mozilla release
+(new toolchains, patches, build flags). PosterFox regenerates itself from their ebuild, and if they change a line we
+depend on, the generator stops and names it.
+
+**Normally there is nothing to do.** A daily timer checks for a new Firefox, and if there is one it builds, signs
+and publishes PosterFox by itself. This document is for when you want to change something, or when that timer
+stopped and told you why.
+
+---
+
+## 1. What PosterFox changes
+
+| What | Where | How |
 |---|---|---|
-| Name, icons, About dialog | `branding/` | `--with-branding=browser/branding/posterfox` (Mozilla's supported rebranding hook; `unofficial` is copied first, then ours is laid over it) |
-| Binary `posterfox`, app name `PosterFox` | ebuild | `--with-app-name=posterfox --with-app-basename=PosterFox` |
-| Profiles stay in `~/.mozilla/firefox` | ebuild | `MOZ_APP_PROFILE=mozilla/firefox`, so moving from firefox-bin keeps passwords, bookmarks and history |
-| **No telemetry, compiled out** | ebuild | The `telemetry` USE flag is removed and every `use telemetry` reads false: `MOZ_TELEMETRY_REPORTING=0`, `MOZ_DATA_REPORTING=0`, `MOZ_SERVICES_HEALTHREPORT=0`, `MOZ_CRASHREPORTER=0`, plus Gentoo's telemetry prefs |
-| uBlock Origin | `pins.json`, `distribution/policies.json` | The AMO-signed release from GitHub (`SRC_URI`), force-installed by policy |
-| Cyberpunk theme | `posterchanai/os/firefox-theme` | Built unsigned into the **application scope** (`browser/extensions/`), which this build allows (`--with-unsigned-addon-scopes=app,system`), and made the default theme |
-| AI sidebar → PosterChan AI | `distribution/posterfox.cfg` | Autoconfig reads `~/.config/posterchan-desktop/config.json` and sets `browser.ml.chat.provider` to `<instance>/client?pcai=1`; the client puts Firefox's `q=` prompt into AI chat, unsent |
-| Window looks like a PosterChan window | `distribution/posterfox-chrome.css` | Registered by the autoconfig as a stylesheet scoped to `browser.xhtml` (never to web pages) |
-| Quiet defaults | `distribution/policies.json`, `posterfox-prefs.js` | No studies, Pocket, sponsored tiles, onboarding or default-browser nagging. These are DEFAULTS: the person can change them |
+| Name, icons, About dialog | `branding/` | Mozilla's rebranding hook, `--with-branding=browser/branding/posterfox`. Mozilla's `unofficial` branding is copied first, then ours is laid over it. Images are drawn by `tools/make-branding.py`. |
+| Binary `posterfox`, app name PosterFox | generator | `--with-app-name=posterfox --with-app-basename=PosterFox` |
+| Profiles stay in `~/.mozilla/firefox` | generator | `imply_option("MOZ_APP_PROFILE", "mozilla/firefox")` is appended to `browser/moz.configure` at prepare. Configure **refuses** this value from a mozconfig. Moving from firefox-bin keeps passwords and bookmarks. |
+| **No telemetry, compiled out** | generator | The `telemetry` USE flag is removed and every `use telemetry` reads false. The result is `MOZ_TELEMETRY_REPORTING=0`, `MOZ_DATA_REPORTING=0`, `MOZ_SERVICES_HEALTHREPORT=0` and `MOZ_CRASHREPORTER=0`, plus Gentoo's telemetry prefs. |
+| **Private by default** | `distribution/policies.json`, `distribution/posterfox-prefs.js` | No history and no form history. `SanitizeOnShutdown` clears cookies, site data, cache, downloads, sessions and site settings on exit. Saved passwords are kept. This is **not** permanent private browsing, because containers do not work in private browsing. |
+| **Every tab its own container** | `extensions/tab-containers/` | A built-in add-on. A page loading in a tab is reopened in a fresh container in the same place, and the container is deleted (cookies and storage too) when its tab closes. Containers the person makes are never touched. |
+| uBlock Origin, Privacy Badger | `pins.json`, `distribution/policies.json` | AMO-signed releases fetched by `SRC_URI` (pinned versions, Manifest-hashed) and force-installed by policy. |
+| Cyberpunk theme | `posterchanai/os/firefox-theme` | Built **unsigned** into the application scope (`browser/extensions/`). This build allows that (`--with-unsigned-addon-scopes=app,system`). It is the default theme. |
+| **Looks like a PosterChan window** | `distribution/posterfox-chrome.css` | Uses the desktop's own values: the title bar (tab strip) in `--panel2`, the theme's violet toolbar, and the selected tab in the focused-window neon ring. The stylesheet carries the theme's colours itself, so the look does not depend on the theme add-on loading. It is registered by the autoconfig and scoped to `browser.xhtml`, never to web pages. |
+| Window buttons like PosterChan windows | `distribution/xdg/gtk-3.0/settings.ini` | `gtk-decoration-layout=:minimize,maximize,close`. The `posterfox` launcher puts that folder first in `XDG_CONFIG_DIRS`. GTK's default layout gives Firefox a close button only. The person's own `~/.config/gtk-3.0` still wins. |
+| AI sidebar → PosterChan AI | `distribution/posterfox.cfg` | The autoconfig reads `~/.config/posterchan-desktop/config.json` (`instance`) and sets `browser.ml.chat.provider` to `<instance>/client?pcai=1`. The client puts Firefox's `q=` prompt into AI chat, unsent. Only a plain `https?://host[:port]` origin is accepted. |
+| Quiet defaults | `distribution/policies.json`, `posterfox-prefs.js` | No studies, Pocket, sponsored tiles, onboarding, default-browser nagging or self-update (Portage updates it). |
+| Stable-system dependencies | `pins.json` → `bundled_libs` | `system-*` USE flags turned off when the system library is still `~amd64` in PosterChanOS's tree. Firefox's bundled copy is used instead (`system-av1` for 159). |
+| Icon | `branding/src/` | PosterChan riding a purple ostrich (Nostr's). See §6. |
+
+Prefs and policies are **defaults**, not locks: anyone can change them in PosterFox's own settings.
 
 **A file at `/etc/posterfox/policies/policies.json` REPLACES ours.** Firefox reads the system policy file first and
-ignores the bundled one (it does not merge them). Leave that path empty unless you mean to.
+then ignores the bundled one (it does not merge them). Leave that path empty unless you mean to replace every
+PosterFox policy.
 
-## Updating to a new Firefox (the usual job)
+---
 
-Gentoo packages every Mozilla release within days, so PosterFox follows Gentoo's tree:
+## 2. The normal case: the timer does it
 
-```
-VM="-J nas.lan root@192.168.122.32"
-tools/update.sh --gentoo-ssh "$VM" --check           # exit 10 = a newer Firefox is available
-tools/update.sh --gentoo-ssh "$VM" --posterchanai ~/posterchanai
-```
+`tools/release.sh` runs daily on server1, at 03:30 from a user timer. Each run:
 
-**Generate from the build VM's tree, never from whatever machine you are on.** The ebuild's dependencies must exist
-in the Gentoo snapshot PosterChanOS machines sync (gentoo.poster.place). server1's own tree was two weeks behind it on
-2026-10-28, and a PosterFox generated from a NEWER tree than the machines have cannot be installed by them.
+1. **Decides what should be published.** That is the newest Firefox in the build VM's synced Gentoo tree, at this
+   repository's `REVISION`, giving `posterfox-<PV>-r<REV>`. If the binhost already serves exactly that, the run stops:
+   nothing to do.
+2. **Regenerates the overlay package** in the posterchanai checkout. Tests run first, then the overlay's own checks.
+   It commits the package and **deploys** it with `sync.sh` like any other change, which publishes the overlay.
+3. **Builds on the build VM** with `emerge --oneshot --buildpkgonly`, spreading the C/C++ over nas.lan and server1
+   with distcc.
+4. **Signs** the package on server1 (the key never leaves it), rebuilds the binhost index, publishes it to nas, and
+   confirms the public index lists the new package.
 
-**PosterChanOS is a stable system.** A new Firefox often wants a library that is still `~amd64` (159.0 wanted
-libaom-3.14.1 for `system-av1`). Add that flag to `bundled_libs` in `pins.json`, so Firefox's bundled copy is used,
-and regenerate. `emerge -pv --oneshot www-client/posterfox` on the build VM finds them.
+It stops at the first failure with **nothing half-published**. It also refuses to start while another deploy is
+running. A run with nothing to do takes about a minute; a release takes the deploy gate (~30 min) plus the build
+(1–2 h).
 
-`update.sh` runs the tests, regenerates `os/overlay/www-client/posterfox/` in the posterchanai checkout from the newest
-`firefox-*.ebuild`, and writes the Manifest (downloading the Firefox source, Gentoo's patchset and uBlock Origin into
-`~/.cache/posterfox/distfiles`). Then commit the overlay in posterchanai and build (below).
-
-**When it stops with `edit '...': expected 1 occurrence(s)`**, Gentoo changed a line one of our edits depends on.
-Open `tools/make-ebuild.py`, look at the named edit and the new Gentoo ebuild, and adjust that one substitution.
-Every edit is listed in `transform()`. Never edit the generated ebuild by hand: the next update overwrites it.
-
-uBlock Origin and Privacy Badger: bump their pins in `pins.json` (`ublock_origin` = the GitHub release tag;
-`privacy_badger` + `privacy_badger_amo_file` = the version and file id from
-`https://addons.mozilla.org/api/v5/addons/addon/privacy-badger17/`), then run `update.sh`. Check the downloaded
-file's sha256 against the hash AMO lists.
-
-A change to PosterFox itself (branding, prefs, policies, the chrome CSS) bumps `REVISION`, which becomes the
-ebuild's `-rN`, so installed machines pick it up on their next `emerge -u`.
-
-## Building the binary package
-
-PosterChanOS machines should not compile Firefox. That takes hours and tens of GB of build space. Build it once on
-the **PosterChanOS build VM** (the libvirt VM "PosterChan" on nas.lan, which also builds the ISOs). It is itself a
-PosterChanOS install, so the binary package matches what installed machines run: the same profile, USE flags and
-CHOST.
+Look at what it did:
 
 ```
-ssh -J nas.lan root@192.168.122.32
-emaint sync -r gentoo -r posterchan            # the overlay a deploy published, with the new posterfox ebuild
-emerge --oneshot --buildpkgonly www-client/posterfox
+tail -50 ~/.cache/posterfox/release.log
+systemctl --user status posterfox-release.timer posterfox-release.service
+curl -s https://gentoo.poster.place/posterchan-binpkgs/Packages | grep -A3 'CPV: www-client/posterfox'
+tools/release.sh --dry-run          # what would it do right now?
 ```
 
-The VM's `/etc/portage/env/posterfox-build.conf` (via `package.env`) gives this one package `FEATURES=distcc`,
-`MAKEOPTS=-j30` and `PORTAGE_TMPDIR=/var/tmp-build`; `/etc/distcc/hosts` names nas.lan and server1. Portage's own
-distcc setup does the rest. `--buildpkgonly` matters: the VM's disk becomes the ISO, so PosterFox must be PACKAGED
-there, never installed.
-
-distcc spreads the C/C++ compiles over server1, router.lan and nas.lan (their `/etc/distcc/hosts`). Rust is most of
-Firefox and does not distribute, so plan on a long build either way. `PORTAGE_TMPDIR` must have about 40 GB free and
-be on disk: a Firefox build does not fit in a RAM tmpfs.
-
-The result is `/var/cache/binpkgs/www-client/posterfox/posterfox-<ver>-r<rev>-1.gpkg.tar`.
-
-## Releasing (automatic)
-
-`tools/release.sh` is the whole update: it works out which PosterFox should be published (newest Firefox in the
-build VM's tree, this repo's `REVISION`), and if the binhost does not already serve exactly that it regenerates the
-overlay package, deploys it with `sync.sh`, builds it on the VM (`--buildpkgonly`, distcc), signs it here, rebuilds
-the binhost index and publishes it. It stops at the first failure with nothing half-published; the log is
-`~/.cache/posterfox/release.log`. `--dry-run` says what it would do.
-
-It runs daily from a user timer on server1:
+Turning the timer on (once):
 
 ```
 cp tools/posterfox-release.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now posterfox-release.timer
 ```
 
-So a new Firefox release reaches PosterChanOS machines within a day of Gentoo packaging it, with no hands. A change
-to PosterFox itself: edit, run the tests, bump `REVISION`, commit -- the next run releases it (or run it now).
+---
 
-The signing key was made once by `tools/binhost-setup.sh`. It lives only in `~/.config/posterfox/gnupg` on server1;
-the public half is `keys/posterchanos-binpkgs.asc` (fingerprint in `keys/posterchanos-binpkgs.fpr`).
+## 3. Recipes
 
-## Publishing
+### The timer stopped: what each message means
 
-The binary packages are served from the PosterChan binhost, signed. Installed machines verify the signature before
-installing anything. `gentoo.sh` configures that repository and installs `www-client/posterfox` with
-`--getbinpkgonly`. If no matching binary is published, it installs `www-client/firefox-bin` instead: a PosterChanOS
-install never waits hours for a browser to compile.
+The last `STOPPED:` line in `~/.cache/posterfox/release.log` names the step.
 
-## The icon
+| Message | Cause | Fix |
+|---|---|---|
+| `edit '<name>': expected 1 occurrence(s) …` (in the log, from update.sh) | Gentoo changed a line in their Firefox ebuild that one of our edits depends on. | Open `tools/make-ebuild.py`, find the named edit in `transform()` and the matching line in the new Gentoo ebuild (`/var/db/repos/gentoo/www-client/firefox/` on the VM), and adjust that one substitution. Run `pytest tests`, commit, run `release.sh`. **Never edit the generated ebuild by hand**: the next update overwrites it. |
+| `the build failed on the VM` with `… have been masked … ~amd64 keyword` | The new Firefox wants a system library that PosterChanOS's stable tree does not have yet. | Find the flag (`emerge -pv --oneshot www-client/posterfox` on the VM says `required by …[system-xyz]`), add it to `bundled_libs` in `pins.json`, bump `REVISION`, commit, run `release.sh`. |
+| `the build failed on the VM` (anything else) | A compile error. | The log has the tail. The full log is `/var/tmp-build/portage/www-client/posterfox-*/temp/build.log` on the VM (cleaned on success). Usually Gentoo has already fixed it in a newer ebuild revision; wait a day and the timer picks it up. |
+| `the overlay checks refused the new ebuild` | One of posterchanai's overlay tests failed on the generated package. | Run them in posterchanai (`tests/test_overlay_*.py`, `test_code_git_ui_and_os.py`, `test_gentoo_packages_exist.py`) and fix what they say. |
+| `the deploy did not pass` | posterchanai's deploy gate failed. | Not a PosterFox problem as a rule. It is whatever the gate says, often a flaky test under load. Fix or re-run the deploy; the next `release.sh` continues from where the overlay is. |
+| `posterchanai has uncommitted changes` | Someone is working in `~/posterchanai`. | Commit or stash; the next run proceeds. |
+| `signing failed` / `no signature` | The key is missing or `gpkg-sign` failed. | `GNUPGHOME=~/.config/posterfox/gnupg gpg --list-secret-keys`. Never make a new key unless the old one is truly lost: machines trust its fingerprint. |
+| `… does not list … yet` | router.lan serves the binhost over NFS and briefly caches the old directory. | Wait a minute and run `release.sh` again; it will say "already serves". |
 
-PosterChan riding a purple ostrich (Nostr's ostrich), on a round night-navy badge with the cyan-to-magenta PosterChan
-rim. `branding/src/posterfox-1024.png` is the full scene (48 px and up); `posterfox-small-1024.png` is her face in
-the cat hood, for 16-32 px, where a whole scene turns to mud. The drawing came from this node's own image model
-(`posterfox-art-source.png`, seed 44), cut out of its white background by flood fill from the edges (an
-AI background remover cut the ostrich's head off), and badged in Python. Replace either master and run
-`tools/update.sh`: every size is redrawn from them.
+### Change something in PosterFox (the look, a pref, a policy, an add-on)
 
-## Repository layout
+1. Edit it. Use the table in §1 to find where it lives.
+2. For the look, preview it **without building PosterFox**:
+   `tools/preview-chrome.sh /tmp/look.png https://example.org`. This runs a stock Firefox in a headless Wayfire with
+   PosterFox's stylesheet and takes a screenshot. It shows the stylesheet alone, not the theme add-on or the window
+   buttons.
+3. Run the tests: `python3 -m pytest tests` (the project venv has pytest: `~/posterchanai/venv-unified/bin/python`).
+4. Bump `REVISION` by one. It becomes the ebuild's `-rN`, and machines only update when it moves.
+5. Commit, then push to **both** remotes: `git push origin main` (Nostr) and `git push github main`. In practice the
+   Nostr push mirrors to GitHub too, because GitHub is a clone URL in the repo announcement.
+6. Run `tools/release.sh`, or let the timer do it.
+
+### Bump uBlock Origin or Privacy Badger
+
+- **uBlock Origin:** `pins.json` → `ublock_origin` = the release tag on
+  https://github.com/gorhill/uBlock/releases.
+- **Privacy Badger:** `pins.json` → `privacy_badger` and `privacy_badger_amo_file` = `current_version.version` and
+  the file id in `current_version.file.url` from
+  `https://addons.mozilla.org/api/v5/addons/addon/privacy-badger17/`.
+- Then bump `REVISION` and run `release.sh`. The Manifest is written from what was downloaded: compare
+  `sha256sum ~/.cache/posterfox/distfiles/posterfox-privacybadger-*.xpi` with the `hash` AMO lists.
+
+### Change the icon
+
+`branding/src/posterfox-1024.png` is the full scene, used at 48 px and up. `posterfox-small-1024.png` is the
+close-up, used at 16–32 px, where a whole scene turns to mud. Both are 1024×1024 on the round neon badge. Replace
+either, then follow the same steps as above (tests, `REVISION`, commit, release). Every size is redrawn from them.
+See §6 for how the current one was made.
+
+### Release by hand
 
 ```
-branding/          brand strings, prefs, configure.sh; images are DRAWN by tools/make-branding.py from branding/src
-distribution/      policies.json, distribution.ini, posterfox-prefs.js, autoconfig.js, posterfox.cfg, posterfox-chrome.css
-pins.json          versions of third-party add-ons (uBlock Origin)
-REVISION           PosterFox's own revision (the ebuild's -rN)
+tools/release.sh --dry-run      # what it would do
+tools/release.sh                # do it (the same thing the timer runs)
+```
+
+### A bad release went out
+
+Machines never downgrade by themselves. So **fix forward**: revert the change in this repository, bump `REVISION`,
+and run `release.sh`. The new, higher revision is what `emerge -u` installs. Do not delete a published package from
+the binhost while machines may still be fetching it; the next release replaces it in the index.
+
+---
+
+## 4. How the pieces fit
+
+```
+posterfox repo (this)                    posterchanai repo
+  branding/ distribution/ extensions/      os/overlay/www-client/posterfox/   <- GENERATED here by update.sh
+  tools/make-ebuild.py  ------------------>  posterfox-<PV>-r<REV>.ebuild + files/ + Manifest
+                                            sync.sh deploy -> publish_overlay.sh
+                                                    |
+                                    https://gentoo.poster.place/posterchan-overlay.git
+                                                    |
+build VM (PosterChanOS, on nas.lan)  <--------------+   emaint sync -r posterchan
+  emerge --buildpkgonly  --distcc-->  nas.lan, server1
+        |  posterfox-…gpkg.tar
+        v
+server1: gpkg-sign (key in ~/.config/posterfox/gnupg) -> emaint binhost --fix -> rsync
+        |
+https://gentoo.poster.place/posterchan-binpkgs/    (nas: /raid/distfiles/distfiles/posterchan-binpkgs)
+        |
+PosterChanOS machines  (gentoo.sh: binrepos entry + the public key)   <-- NOT YET, see §7
+```
+
+**Repositories.**
+- This repo lives at `nostr://npub1fdtthaq…/relay.poster.place/posterfox` (origin; its clone URL is
+  `https://poster.place/git/npub1fdtthaq…/posterfox.git`), mirrored at
+  `https://github.com/loblawbob873-svg/posterfox`.
+- The repo's kind-30617 announcement lists both. It was published with a script because `ngit init` could not
+  connect to either relay.
+
+**The build VM** is the libvirt VM "PosterChan" on nas.lan (`ssh -J nas.lan root@192.168.122.32`), the same one
+that builds the PosterChanOS ISOs. It is a PosterChanOS install, so a package built there matches installed
+machines: the same profile, USE flags, CHOST and `-march=x86-64-v3`. Its PosterFox settings:
+
+- `/etc/portage/package.env` → `www-client/posterfox posterfox-build.conf`
+- `/etc/portage/env/posterfox-build.conf`: `PORTAGE_TMPDIR="/var/tmp-build"` (about 40 GB, **on disk**; `/var/tmp`
+  is a RAM tmpfs), `FEATURES="distcc"`, `MAKEOPTS="-j30 -l12"`
+- `/etc/portage/package.accept_keywords/posterfox`: `www-client/posterfox ~amd64`
+- `/etc/distcc/hosts`: `192.168.0.85/12 192.168.0.2/12 localhost/10`. The original is kept as
+  `hosts.orig-before-posterfox`. `sys-devel/distcc` is installed there with `--oneshot`.
+
+**distcc.** It is Portage's own setup (`FEATURES=distcc`), nothing custom.
+- nas.lan's distccd also accepts the VM's NAT subnet, via the drop-in
+  `/etc/systemd/system/distccd.service.d/posterfox-vm.conf` (`--allow 192.168.122.0/24`).
+- Rust, most of Firefox, does not distribute; the C/C++ half does.
+
+**The signing key** was made once by `tools/binhost-setup.sh`.
+- Fingerprint `7B690AA70C09AD1AD7748CF5B6F8DA9DDF2EF936`; the public half is `keys/posterchanos-binpkgs.asc`.
+- The secret half is only in `~/.config/posterfox/gnupg` on server1. It has no passphrase so the timer can sign
+  unattended, which is exactly why it signs nothing but PosterChanOS packages and never goes anywhere else
+  (not GitHub, not a CI secret).
+
+**The binhost** is `/raid/distfiles/distfiles/posterchan-binpkgs` on nas.lan, served by router.lan as
+`https://gentoo.poster.place/posterchan-binpkgs/`. nas mirrors Gentoo's distfiles into `/raid/distfiles` with
+`rsync --delete` every morning. That job excludes this directory (`/opt/admintools/admintools/servers.py`, commit
+`da4d260`), exactly as it excludes the overlay. **Any new directory in that tree needs the same exclusion**, or it
+is deleted every day at 06:00.
+
+---
+
+## 5. Things that will bite you
+
+- **The build VM's disk becomes the ISO.** Only ever `emerge --buildpkgonly` PosterFox there; a plain emerge
+  installs it into the next ISO. `release.sh` also deletes `/var/tmp-build/portage/www-client/posterfox-*` after a
+  build, because that 40 GB must not reach an image. After a failed manual build, delete it yourself.
+- **Generate from the VM's Gentoo tree, never from the machine you are on.** server1's tree was two weeks behind
+  `gentoo.poster.place` on 2026-10-28. A PosterFox generated from a newer tree than the machines have cannot be
+  installed by them. `release.sh` and `update.sh --gentoo-ssh` take the tree from the VM.
+- **`MOZ_APP_PROFILE` from a mozconfig fails configure** ("can not be set by mozconfig. Values are accepted from:
+  implied"). That is why it is implied in `browser/moz.configure`.
+- **`pkill -f <pattern>` over ssh can kill your own ssh session** when the pattern is part of the command you sent
+  (exit 255, nothing done). Use `pkill -x <name>`.
+- **`diff` is aliased to nvim on server1.** Use `/usr/bin/diff`.
+- **The chrome preview on server1 runs through Xwayland.** server1's GTK is built `-wayland`. The preview cannot
+  show the theme add-on (a theme sideloaded into a fresh profile does not activate) or the window buttons (there is
+  no window manager in it), so check those on a real PosterChanOS desktop.
+- **Stock Firefox will not load an unsigned add-on.** The tab-containers add-on can only be tried in PosterFox
+  itself (application scope) or temporarily via `about:debugging`.
+- **Containers and private browsing do not mix.** "Never remember history" in Firefox's settings is permanent
+  private browsing and switches containers off. PosterFox gets the same effect from prefs plus `SanitizeOnShutdown`
+  instead.
+- **Firefox's own updater is off** (`DisableAppUpdate`). Portage is the updater. A PosterFox that offers "Restart to
+  update" means a policy did not load.
+
+---
+
+## 6. The icon
+
+PosterChan riding a purple ostrich (Nostr's ostrich), on a round night-navy badge with the cyan-to-magenta
+PosterChan rim. How it was made:
+
+1. The drawing came from this node's own image model as `branding/src/posterfox-art-source.png`. The prompt was
+   chibi PosterChan in her black hoodie with the yellow star and the cat-ear hood, riding a bright violet ostrich,
+   sticker style, plain white background; seed 44.
+2. It was cut out by **flood-filling the near-white background from the edges**. An AI background remover was tried
+   first and cut the ostrich's head off.
+3. It was placed on the badge with a white sticker outline, in Python.
+
+At 16–32 px only her face in the cat hood is used.
+
+---
+
+## 7. Not done yet
+
+- **PosterChanOS machines do not install PosterFox yet.** `gentoo.sh` still installs `firefox-bin`. Once the first
+  signed PosterFox is published **and checked on a real PosterChanOS desktop** (look, window buttons, containers,
+  codecs, add-ons, an existing profile carrying over), **firefox-bin is replaced by PosterFox in `gentoo.sh`**:
+  - a `[posterchan]` entry in `binrepos.conf` pointing at the binhost;
+  - the public key;
+  - `www-client/posterfox` installed from the signed binary in place of `firefox-bin`.
+- **The daily timer is not enabled yet.** It is enabled after the first release has gone through `release.sh` end
+  to end.
+- **PosterChan Connect** (passwords from the PosterChan vault, bookmark sync over Nostr, a Tor switch) is designed
+  in `docs/CONNECT.md` and not built.
+
+Update this section as each lands.
+
+---
+
+## 8. Repository layout
+
+```
+branding/                  brand strings, prefs, configure.sh; branding/src = the icon masters + art source
+distribution/              policies.json, distribution.ini, posterfox-prefs.js, autoconfig.js + posterfox.cfg,
+                           posterfox-chrome.css, xdg/gtk-3.0/settings.ini
+extensions/tab-containers/ the every-tab-its-own-container add-on (rules in containers.js, browser glue in background.js)
+keys/                      the binary-package signing key, PUBLIC half + fingerprint
+pins.json                  uBlock Origin / Privacy Badger versions, bundled_libs
+REVISION                   PosterFox's own revision (the ebuild's -rN)
 tools/
-  make-ebuild.py   Gentoo firefox ebuild -> www-client/posterfox (the asserted edits)
-  make-branding.py the icons and logos, at Mozilla's sizes, deterministically
-  assemble.py      collects everything into build/files-posterfox (the ebuild's files/posterfox/)
-  update.sh        the whole update, start to finish
-tests/             the generator against a real Gentoo ebuild, a broken one, the autoconfig under node, ...
+  make-ebuild.py           Gentoo's firefox ebuild -> www-client/posterfox (the asserted edits) + the launcher
+  make-branding.py         every icon and logo at Mozilla's sizes, deterministically
+  assemble.py              collects everything into build/files-posterfox (the ebuild's files/posterfox/)
+  update.sh                regenerate the overlay package (--check: is there a newer Firefox?)
+  release.sh               the whole release, start to finish (what the timer runs)
+  binhost-setup.sh         one time: the signing key + the binhost directory
+  preview-chrome.sh        screenshot the window chrome without building
+  posterfox-release.{service,timer}
+tests/                     the generator against a real Gentoo ebuild and a broken one, the launcher, branding,
+                           policies, the autoconfig under node, the tab-containers add-on against a fake browser
+docs/CONNECT.md            PosterChan Connect design (phase 2)
 ```
