@@ -1,1 +1,7 @@
-{"ublock_origin": "1.75.0"}
+{
+  "ublock_origin": "1.75.0",
+  "bundled_libs": [
+    "system-av1"
+  ],
+  "_bundled_libs": "system-* USE flags turned OFF by default: Firefox's bundled copy is used because the system library it wants is still ~amd64 in the tree PosterChanOS machines sync. Found by `emerge -pv www-client/posterfox` on the build VM (see docs/MAINTAINING.md)."
+}

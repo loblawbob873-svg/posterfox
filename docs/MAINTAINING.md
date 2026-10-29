@@ -26,10 +26,18 @@ ignores the bundled one (it does not merge them). Leave that path empty unless y
 Gentoo packages every Mozilla release within days, so PosterFox follows Gentoo's tree:
 
 ```
-emerge --sync                         # or: the build VM's update-posterchan
-tools/update.sh --check               # exit 10 = a newer Firefox is available
-tools/update.sh --posterchanai ~/posterchanai
+VM="-J nas.lan root@192.168.122.32"
+tools/update.sh --gentoo-ssh "$VM" --check           # exit 10 = a newer Firefox is available
+tools/update.sh --gentoo-ssh "$VM" --posterchanai ~/posterchanai
 ```
+
+**Generate from the build VM's tree, never from whatever machine you are on.** The ebuild's dependencies must exist
+in the Gentoo snapshot PosterChanOS machines sync (gentoo.poster.place). server1's own tree was two weeks behind it on
+2026-10-28, and a PosterFox generated from a NEWER tree than the machines have cannot be installed by them.
+
+**PosterChanOS is a stable system.** A new Firefox often wants a library that is still `~amd64` (159.0 wanted
+libaom-3.14.1 for `system-av1`). Add that flag to `bundled_libs` in `pins.json`, so Firefox's bundled copy is used,
+and regenerate. `emerge -pv --oneshot www-client/posterfox` on the build VM finds them.
 
 `update.sh` runs the tests, regenerates `os/overlay/www-client/posterfox/` in the posterchanai checkout from the newest
 `firefox-*.ebuild`, and writes the Manifest (downloading the Firefox source, Gentoo's patchset and uBlock Origin into

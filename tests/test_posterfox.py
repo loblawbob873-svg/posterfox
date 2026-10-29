@@ -29,11 +29,11 @@ MB = _load("make_branding", ROOT / "tools" / "make-branding.py")
 
 
 def _gen(src=None):
-    return ME.transform(src or (FIX / "firefox-158.0.ebuild").read_text(), 1)
+    return ME.transform(src or (FIX / "firefox-159.0.ebuild").read_text(), 1)
 
 
 def test_the_generated_ebuild_is_valid_bash(tmp_path):
-    p = tmp_path / "posterfox-158.0-r1.ebuild"
+    p = tmp_path / "posterfox-159.0-r1.ebuild"
     p.write_text(_gen())
     r = subprocess.run(["bash", "-n", str(p)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -61,7 +61,7 @@ def test_branding_name_profiles_and_ublock():
 
 
 def test_a_changed_upstream_line_stops_the_generator():
-    src = (FIX / "firefox-158.0.ebuild").read_text().replace("--enable-official-branding", "--enable-official-brandingX")
+    src = (FIX / "firefox-159.0.ebuild").read_text().replace("--enable-official-branding", "--enable-official-brandingX")
     with pytest.raises(SystemExit) as e:
         _gen(src)
     assert "branding configure flags" in str(e.value)
@@ -82,12 +82,12 @@ def test_newest_firefox_skips_esr_and_rc(tmp_path):
 def test_the_full_package_dir(tmp_path):
     gentoo = tmp_path / "gentoo"
     gentoo.mkdir()
-    shutil.copy(FIX / "firefox-158.0.ebuild", gentoo / "firefox-158.0.ebuild")
+    shutil.copy(FIX / "firefox-159.0.ebuild", gentoo / "firefox-159.0.ebuild")
     shutil.copytree(FIX / "firefox-files", gentoo / "files")
     (ROOT / "build" / "files-posterfox").mkdir(parents=True, exist_ok=True)
     out = tmp_path / "posterfox"
-    ME.main(["--gentoo", str(gentoo), "--version", "158.0", "--out", str(out), "--rev", "3"])
-    assert (out / "posterfox-158.0-r3.ebuild").exists()
+    ME.main(["--gentoo", str(gentoo), "--version", "159.0", "--out", str(out), "--rev", "3"])
+    assert (out / "posterfox-159.0-r3.ebuild").exists()
     assert (out / "files" / "posterfox-r1.sh").exists() and (out / "files" / "posterfox").is_dir()
 
 
@@ -161,3 +161,9 @@ console.log(JSON.stringify(set));
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout).get("browser.ml.chat.provider")
     assert got == want, (instance, got)
+
+
+def test_bundled_libs_are_off_by_default():
+    t = _gen()
+    for flag in json.loads((ROOT / "pins.json").read_text())["bundled_libs"]:
+        assert "+" + flag not in t and re.search(r"\b" + re.escape(flag) + r"\b", t), flag

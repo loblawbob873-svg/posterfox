@@ -97,6 +97,9 @@ def transform(src: str, rev: int) -> str:
             '\t${PATCH_URIS[@]}\n\thttps://github.com/gorhill/uBlock/releases/download/${POSTERFOX_UBO}/uBlock0_${POSTERFOX_UBO}.firefox.signed.xpi -> posterfox-ublock0-${POSTERFOX_UBO}.xpi\n',
             what="SRC_URI uBlock")
     t = sub(t, 'S="${WORKDIR}/${PN}-${PV%_*}"', 'S="${WORKDIR}/${MOZ_PN}-${PV%_*}"', what="S")
+    # PosterChanOS runs stable: a system library newer than its tree has is replaced by Firefox's bundled copy.
+    for flag in PINS.get("bundled_libs", []):
+        t = resub(t, r'^(IUSE\+?=".*?)\+' + re.escape(flag) + r'\b', r'\1' + flag, f"bundled {flag}")
     # Telemetry is not a choice in PosterFox: the flag goes, and every `use telemetry` reads false.
     t = resub(t, r'^(IUSE\+?=".*?) \+telemetry(.*")$', r'\1\2', "IUSE telemetry")
     t = resub(t, r'\buse telemetry\b', 'false', "use telemetry", count=len(re.findall(r'\buse telemetry\b', t)) or 1)

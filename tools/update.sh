@@ -5,6 +5,9 @@
 #
 #   --check      only say whether a newer Firefox is available (exit 10 if so, 0 if PosterFox is current) -- for a
 #                timer that should not touch anything
+#   --gentoo-ssh HOST   take www-client/firefox from HOST's Gentoo tree (ssh). Use the BUILD VM: PosterFox must be
+#                generated from the tree PosterChanOS machines sync (gentoo.poster.place), or its dependencies may not
+#                exist there. Default: -J nas.lan root@192.168.122.32, freshly synced.
 #
 # What it does, in order (any failure stops it before anything half-done is left in the overlay):
 #   1. finds the newest rapid-release firefox-*.ebuild in the Gentoo tree (Gentoo tracks every Mozilla release);
@@ -25,11 +28,19 @@ while [ $# -gt 0 ]; do
 		--posterchanai) PCAI=$2; shift ;;
 		--gentoo) GENTOO=$2; shift ;;
 		--distdir) DISTDIR=$2; shift ;;
+		--gentoo-ssh) GENTOO_SSH=$2; shift ;;
 		*) echo "unknown option $1" >&2; exit 2 ;;
 	esac
 	shift
 done
 PKG="$PCAI/os/overlay/www-client/posterfox"
+if [ -n "${GENTOO_SSH:-}" ]; then
+	TREE=$(mktemp -d)
+	trap 'rm -rf "$TREE"' EXIT
+	# shellcheck disable=SC2086
+	ssh -o BatchMode=yes $GENTOO_SSH 'emaint sync -r gentoo >/dev/null 2>&1; tar -cf - -C /var/db/repos/gentoo/www-client firefox' | tar -xf - -C "$TREE"
+	GENTOO="$TREE/firefox"
+fi
 
 newest=$("$PY" -c "import importlib.util,sys,pathlib
 s=importlib.util.spec_from_file_location('m','$HERE/tools/make-ebuild.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
