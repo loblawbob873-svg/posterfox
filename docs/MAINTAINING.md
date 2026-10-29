@@ -173,7 +173,7 @@ posterfox repo (this)                    posterchanai repo
                                     https://gentoo.poster.place/posterchan-overlay.git
                                                     |
 build VM (PosterChanOS, on nas.lan)  <--------------+   emaint sync -r posterchan
-  emerge --buildpkgonly  --distcc-->  nas.lan, server1
+  emerge --buildpkgonly  (its own cores; ~18 min)  ->  tools/smoke.py checks the built browser
         |  posterfox-…gpkg.tar
         v
 server1: gpkg-sign (key in ~/.config/posterfox/gnupg) -> emaint binhost --fix -> rsync
@@ -203,7 +203,7 @@ machines: the same profile, USE flags, CHOST and `-march=x86-64-v3`. Its PosterF
 
 **distcc is not used.** Measured 2026-10-29: Firefox's build calls clang by its absolute path, which bypasses Portage's
 distcc wrapper, so no work left the VM. The compile takes about 18 minutes on the VM's own cores. distcc was removed
-from the VM and nas.lan's `posterfox-vm.conf` drop-in can go too.
+from the VM, and nas.lan's `posterfox-vm.conf` distccd drop-in was deleted (it applies at distccd's next restart).
 
 **The signing key** was made once by `tools/binhost-setup.sh`.
 - Fingerprint `7B690AA70C09AD1AD7748CF5B6F8DA9DDF2EF936`; the public half is `keys/posterchanos-binpkgs.asc`.
