@@ -179,3 +179,12 @@ def test_privacy_badger_is_fetched_pinned_and_forced_like_ublock():
     assert 'jid1-MnnxcxisBPnSXQ@jetpack.xpi' in t
     pol = json.loads((ROOT / "distribution" / "policies.json").read_text())["policies"]["ExtensionSettings"]
     assert pol["jid1-MnnxcxisBPnSXQ@jetpack"]["installation_mode"] == "force_installed"
+
+
+def test_window_buttons_like_posterchan_windows():
+    w = ME.wrapper((FIX / "firefox-files" / "firefox-r1.sh").read_text())
+    assert 'export XDG_CONFIG_DIRS="${MOZILLA_FIVE_HOME}/posterfox/xdg' in w
+    assert w.index("XDG_CONFIG_DIRS") < w.index("exec ${MOZ_PROGRAM}")
+    ini = (ROOT / "distribution" / "xdg" / "gtk-3.0" / "settings.ini").read_text()
+    assert "gtk-decoration-layout=:minimize,maximize,close" in ini
+    assert "posterfox/xdg/gtk-3.0" in _gen()

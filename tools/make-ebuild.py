@@ -86,6 +86,8 @@ posterfox_distribution() {
 	doins "${FILESDIR}/posterfox/distribution/posterfox.cfg"
 	insinto "${MOZILLA_FIVE_HOME}/posterfox"
 	doins "${FILESDIR}/posterfox/distribution/posterfox-chrome.css"
+	insinto "${MOZILLA_FIVE_HOME}/posterfox/xdg/gtk-3.0"
+	doins "${FILESDIR}/posterfox/distribution/xdg/gtk-3.0/settings.ini"
 }
 '''
 
@@ -144,7 +146,13 @@ def transform(src: str, rev: int) -> str:
 def wrapper(src: str) -> str:
     """Gentoo's /usr/bin/firefox launcher, pointed at /usr/lib*/posterfox/posterfox."""
     t = sub(src, 'MOZ_FIREFOX_FILE="firefox"', 'MOZ_FIREFOX_FILE="posterfox"', what="wrapper program")
-    return resub(t, r'(LIB_DIR\})/firefox\b', r'\1/posterfox', "wrapper lib dirs", count=5)
+    t = resub(t, r'(LIB_DIR\})/firefox\b', r'\1/posterfox', "wrapper lib dirs", count=5)
+    # PosterChan windows have minimise/maximise/close on the right; GTK's default layout gives Firefox close only.
+    # PosterFox's own GTK settings come first in XDG_CONFIG_DIRS (the user's ~/.config still wins).
+    return sub(t, '# Run the browser\n',
+               '# PosterFox: its own GTK settings first (window buttons like every PosterChan window)\n'
+               'export XDG_CONFIG_DIRS="${MOZILLA_FIVE_HOME}/posterfox/xdg${XDG_CONFIG_DIRS:+:${XDG_CONFIG_DIRS}}"\n\n'
+               '# Run the browser\n', what="wrapper gtk settings")
 
 
 def newest_firefox(gentoo: pathlib.Path) -> str:
