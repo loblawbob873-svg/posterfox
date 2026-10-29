@@ -283,3 +283,25 @@ def test_no_bundled_add_on_opens_a_welcome_tab():
     import json
     pol = json.loads((ROOT / "distribution" / "policies.json").read_text())["policies"]
     assert pol["3rdparty"]["Extensions"]["jid1-MnnxcxisBPnSXQ@jetpack"]["showIntroPage"] is False
+
+
+def test_every_easylist_is_on_in_ublock():
+    """"can you enable all the Easy lists automatically for ublock?" (2026-10-29). uBlock Origin reads its list
+    selection from managed storage (policies.json 3rdparty, `toOverwrite.filterLists`); the IDs must be ones the shipped
+    uBlock knows, every EasyList it offers (bar the regional ones) is on, and uBlock's own defaults stay on."""
+    import zipfile
+    from pathlib import Path
+    pol = json.loads((ROOT / "distribution" / "policies.json").read_text())["policies"]
+    on = pol["3rdparty"]["Extensions"]["uBlock0@raymondhill.net"]["toOverwrite"]["filterLists"]
+    pins = json.loads((ROOT / "pins.json").read_text())
+    xpi = Path.home() / ".cache/posterfox/distfiles" / ("posterfox-ublock0-%s.xpi" % pins["ublock_origin"])
+    if not xpi.exists():
+        pytest.skip("the pinned uBlock Origin is not downloaded here")
+    assets = json.loads(zipfile.ZipFile(xpi).read("assets/assets.json"))
+    known = {k for k, v in assets.items() if v.get("content") == "filters"} | {"user-filters"}
+    assert set(on) <= known, set(on) - known
+    easy = {k for k, v in assets.items() if v.get("content") == "filters" and v.get("group") != "regions"
+            and ("EasyList" in v.get("title", "") or k.startswith("easylist"))}
+    assert easy <= set(on), easy - set(on)
+    defaults = {k for k, v in assets.items() if v.get("content") == "filters" and not v.get("off") and v.get("group") != "regions"}
+    assert defaults <= set(on) and "user-filters" in on, defaults - set(on)

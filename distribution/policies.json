@@ -85,6 +85,30 @@
       "Extensions": {
         "jid1-MnnxcxisBPnSXQ@jetpack": {
           "showIntroPage": false
+        },
+        "uBlock0@raymondhill.net": {
+          "toOverwrite": {
+            "filterLists": [
+              "user-filters",
+              "ublock-filters",
+              "ublock-badware",
+              "ublock-privacy",
+              "ublock-unbreak",
+              "ublock-quick-fixes",
+              "easylist",
+              "easyprivacy",
+              "urlhaus-1",
+              "plowe-0",
+              "fanboy-cookiemonster",
+              "ublock-cookies-easylist",
+              "fanboy-social",
+              "easylist-annoyances",
+              "easylist-chat",
+              "fanboy-ai-suggestions",
+              "easylist-newsletters",
+              "easylist-notifications"
+            ]
+          }
         }
       }
     }
