@@ -23,6 +23,9 @@ cat >mozconfig <<'MOZ'
 ac_add_options --enable-application=browser
 ac_add_options --enable-bootstrap
 ac_add_options --enable-release
+# The RELEASE channel, as Gentoo's firefox ebuild builds it (--enable-update-channel=release): left at "default",
+# Firefox switches toolkit.telemetry.enabled on at run time -- the release check failed on it (2026-10-29).
+ac_add_options --enable-update-channel=release
 ac_add_options --enable-optimize
 ac_add_options --disable-debug
 ac_add_options --disable-tests

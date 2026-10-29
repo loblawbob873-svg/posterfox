@@ -97,9 +97,14 @@ return {
     "identity.fxaccounts.enabled"].map(k => [k, get(k)])),
   chromeCss: css.exists() && sss.sheetRegistered(Services.io.newFileURI(css), sss.USER_SHEET),
   themeFrame: (() => { try { const w = Services.wm.getMostRecentWindow("navigator:browser"); if (!w) return null;
+    // Firefox 159 draws a theme's theme_frame on the window's <body>, under a transparent toolbox (measured on the
+    // portable build, 2026-10-29); older ones on #navigator-toolbox. Both are read, and what sits over it.
     const tb = w.document.getElementById("TabsToolbar"), box = w.document.getElementById("navigator-toolbox");
+    const bodyImg = w.getComputedStyle(w.document.body).backgroundImage, boxImg = w.getComputedStyle(box).backgroundImage;
     return { tabsBg: w.getComputedStyle(tb).backgroundColor, tabsImg: w.getComputedStyle(tb).backgroundImage,
-             frame: w.getComputedStyle(box).backgroundImage }; } catch (e) { return { error: String(e) }; } })(),
+             frame: boxImg.includes("url(") ? boxImg : bodyImg,
+             boxBg: boxImg.includes("url(") ? "rgba(0, 0, 0, 0)" : w.getComputedStyle(box).backgroundColor };
+  } catch (e) { return { error: String(e) }; } })(),
 };
 """
 CHROME_NEWTAB = r"""
@@ -138,9 +143,19 @@ CHROME_CONTAINERS = r"""
 const done = arguments[arguments.length - 1];
 const win = Services.wm.getMostRecentWindow("navigator:browser");
 const before = win.gBrowser.tabs.length;
-for (let i = 0; i < 2; i++)
-  win.gBrowser.addTab("about:blank", { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
-setTimeout(() => done({ before, tabs: [...win.gBrowser.tabs].map(t => t.userContextId) }), 4000);
+// A NEW TAB THE WAY A PERSON OPENS ONE (Ctrl+T / +: about:newtab) -- not about:blank, which every page tab starts as
+// and which the add-on deliberately leaves alone (that is what kept Settings and the uBlock dashboard out of
+// containers, 2026-10-29). And Settings itself, which must stay a plain tab showing Settings.
+for (let i = 0; i < 2; i++) win.BrowserCommands.openTab();
+setTimeout(() => {
+  const tabs = [...win.gBrowser.tabs].map(t => t.userContextId);
+  // From the first (page) tab: Settings opened over a blank new tab would reuse that tab instead.
+  win.gBrowser.selectedTab = win.gBrowser.tabs[0];
+  win.openPreferences();
+  setTimeout(() => done({ before, tabs,
+    settings: [...win.gBrowser.tabs].filter(t => t.linkedBrowser.currentURI.spec.startsWith("about:preferences"))
+                                    .map(t => t.userContextId) }), 3000);
+}, 4000);
 """
 
 
@@ -258,6 +273,7 @@ def main(argv):
         need(report.get("chromeCss") is True, "the PosterChan window stylesheet is not registered")
         tf = report.get("themeFrame") or {}
         need("url(" in (tf.get("frame") or ""), "the PosterChan theme's banner is not on the toolbar (%s)" % tf)
+        need((tf.get("boxBg") or "") in ("rgba(0, 0, 0, 0)", "transparent"), "the toolbox is painted over the PosterChan theme's banner (%s)" % tf)
         need((tf.get("tabsBg") or "") in ("rgba(0, 0, 0, 0)", "transparent") and (tf.get("tabsImg") or "none") == "none",
              "the tab strip is painted over the PosterChan theme's banner (%s)" % tf)
         ads = {a["id"]: a for a in report.get("addons") or [] if isinstance(a, dict)}
@@ -278,6 +294,8 @@ def main(argv):
             need(d not in ("none", "missing"), "the %s window button is not shown" % b)
         tabs = (report.get("containers") or {}).get("tabs") or []
         need(len(tabs) >= 3 and len(set(t for t in tabs if t)) >= 3, "new tabs are not each in their own container (%s)" % tabs)
+        st = (report.get("containers") or {}).get("settings")
+        need(st == [0], "Settings did not open as a plain tab showing Settings (%s)" % st)
         for k, v in (report.get("codecs") or {}).items():
             need(v in ("probably", "maybe"), "cannot play " + k)
     report["failed"] = failed
