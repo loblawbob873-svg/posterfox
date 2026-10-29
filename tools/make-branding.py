@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw PosterFox's branding images from the PosterChan icon (branding/src/icon-512.png).
+"""Draw PosterFox's branding images from the PosterFox icon: PosterChan riding a purple ostrich (Nostr's).
 
     tools/make-branding.py OUT_DIR
 
@@ -16,7 +16,11 @@ import sys
 from PIL import Image, ImageDraw, ImageFilter
 
 HERE = pathlib.Path(__file__).resolve().parent.parent
-SRC = HERE / "branding" / "src" / "icon-512.png"
+# Two masters (1024 px, round neon badge): the full scene, and her face for the sizes where a whole scene is mud
+# (tabs, taskbar: <= 32 px). The art came from this node's own image model (posterfox-art-source.png) and was cut out
+# and badged by hand; see docs/MAINTAINING.md, "The icon".
+SRC = HERE / "branding" / "src" / "posterfox-1024.png"
+SMALL = HERE / "branding" / "src" / "posterfox-small-1024.png"
 NEON, NEON2, BG = (60, 232, 255), (255, 92, 240), (10, 10, 15)
 
 
@@ -27,7 +31,7 @@ def _png(img: Image.Image) -> bytes:
 
 
 def icon(size: int) -> Image.Image:
-    return Image.open(SRC).convert("RGBA").resize((size, size), Image.LANCZOS)
+    return Image.open(SMALL if size <= 32 else SRC).convert("RGBA").resize((size, size), Image.LANCZOS)
 
 
 def private_icon(size: int) -> Image.Image:

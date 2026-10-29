@@ -80,6 +80,15 @@ installing anything. `gentoo.sh` configures that repository and installs `www-cl
 `--getbinpkgonly`. If no matching binary is published, it installs `www-client/firefox-bin` instead: a PosterChanOS
 install never waits hours for a browser to compile.
 
+## The icon
+
+PosterChan riding a purple ostrich (Nostr's ostrich), on a round night-navy badge with the cyan-to-magenta PosterChan
+rim. `branding/src/posterfox-1024.png` is the full scene (48 px and up); `posterfox-small-1024.png` is her face in
+the cat hood, for 16-32 px, where a whole scene turns to mud. The drawing came from this node's own image model
+(`posterfox-art-source.png`, seed 44), cut out of its white background by flood fill from the edges (an
+AI background remover cut the ostrich's head off), and badged in Python. Replace either master and run
+`tools/update.sh`: every size is redrawn from them.
+
 ## Repository layout
 
 ```
