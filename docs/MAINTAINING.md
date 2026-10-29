@@ -131,13 +131,16 @@ The last `STOPPED:` line in `~/.cache/posterfox/release.log` names the step.
    Nostr push mirrors to GitHub too, because GitHub is a clone URL in the repo announcement.
 6. Run `tools/release.sh`, or let the timer do it.
 
-### Bump uBlock Origin or Privacy Badger
+### Bump uBlock Origin, Privacy Badger or PosterChan Passwords
 
 - **uBlock Origin:** `pins.json` → `ublock_origin` = the release tag on
   https://github.com/gorhill/uBlock/releases.
 - **Privacy Badger:** `pins.json` → `privacy_badger` and `privacy_badger_amo_file` = `current_version.version` and
   the file id in `current_version.file.url` from
   `https://addons.mozilla.org/api/v5/addons/addon/privacy-badger17/`.
+- **PosterChan Passwords:** `pins.json` → `posterchan_passwords` and `posterchan_passwords_amo_file` from
+  `https://addons.mozilla.org/api/v5/addons/addon/posterchan-passwords/` (posterchanai's CI publishes each version there
+  when `extension/manifest.json`'s version changes). Between PosterFox releases AMO updates it in place anyway.
 - Then bump `REVISION` and run `release.sh`. The Manifest is written from what was downloaded: compare
   `sha256sum ~/.cache/posterfox/distfiles/posterfox-privacybadger-*.xpi` with the `hash` AMO lists.
 
