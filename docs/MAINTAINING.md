@@ -151,6 +151,18 @@ close-up, used at 16–32 px, where a whole scene turns to mud. Both are 1024×1
 either, then follow the same steps as above (tests, `REVISION`, commit, release). Every size is redrawn from them.
 See §6 for how the current one was made.
 
+### The portable tarball (GitHub)
+
+`tools/portable-release.sh` builds the PosterFox people can run on any x86-64 Linux and publishes it as a release of
+github.com/loblawbob873-svg/posterfox (`v<PV>-r<REV>`, marked latest). Run it after `release.sh` published a version:
+it builds the same version and revision. The Gentoo package links against PosterChanOS's own libraries; this one is
+Mozilla's source built with Mozilla's own toolchain and sysroot (`--enable-bootstrap`), so it runs anywhere. Gentoo's
+patches are not applied. PosterFox's own changes are the same: branding, telemetry compiled out, policies, prefs,
+theme and add-ons (`tools/portable_layout.py`). The AMO add-ons are installed from addons.mozilla.org there, because a
+tarball can be unpacked anywhere. It goes through the same `tools/smoke.py` check and publishes nothing if that fails.
+The build user and Mozilla's toolchains (several GB) live under `/var/tmp-build`, which the ISO excludes, and the users
+are deleted at the end. Log: `~/.cache/posterfox/portable.log`.
+
 ### Release by hand
 
 ```
