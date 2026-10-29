@@ -32,12 +32,15 @@ say "portable PosterFox $PV-r$REV"
 say "assemble"; python3 "$HERE/tools/assemble.py" --posterchanai "$PCAI" >>"$LOG" 2>&1
 IN=/var/tmp-build/portable-in OUTD=/var/tmp-build/portable-out
 # The build user, its toolchains (~/.mozbuild, several GB) and the test user live under /var/tmp-build, which the ISO
-# excludes, and both users are removed at the end: this VM's disk is what PosterChanOS images are made from.
+# excludes, and both users are removed at the end: this VM's disk is what PosterChanOS images are made from. So each
+# run makes them again, under NEW ids, and their old files (the toolchains, the objdir, the smoke home) belong to
+# nobody: ownership is handed over recursively, or the next build cannot even clear its stage (2026-10-29).
 P=/var/tmp-build/portable
 cleanup() { vm "userdel pfbuild 2>/dev/null; userdel posterfoxtest 2>/dev/null; rm -rf /var/tmp-build/portable-smoke" || true; }
 trap cleanup EXIT
 vm "rm -rf $IN $OUTD; mkdir -p $IN/tools $OUTD $P; id pfbuild >/dev/null 2>&1 || useradd -d $P/home -m pfbuild; \
-    id posterfoxtest >/dev/null 2>&1 || useradd -d /var/tmp-build/portable-smoke-home -m posterfoxtest; chown pfbuild $P"
+    id posterfoxtest >/dev/null 2>&1 || useradd -d /var/tmp-build/portable-smoke-home -m posterfoxtest; \
+    chown -R pfbuild $P; chown -R posterfoxtest /var/tmp-build/portable-smoke-home"
 tar -C "$HERE" -cf - tools/portable-build.sh tools/portable_layout.py tools/smoke.py build/files-posterfox \
 	| vm "tar -C $IN -xf - && chown -R pfbuild $IN $OUTD"
 
