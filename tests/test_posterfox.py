@@ -183,11 +183,11 @@ def test_privacy_badger_is_fetched_pinned_and_forced_like_ublock():
 
 def test_window_buttons_like_posterchan_windows():
     w = ME.wrapper((FIX / "firefox-files" / "firefox-r1.sh").read_text())
-    assert 'export XDG_CONFIG_DIRS="${MOZILLA_FIVE_HOME}/posterfox/xdg' in w
+    assert 'export XDG_CONFIG_DIRS="${MOZILLA_FIVE_HOME}/posterchan/xdg' in w
     assert w.index("XDG_CONFIG_DIRS") < w.index("exec ${MOZ_PROGRAM}")
     ini = (ROOT / "distribution" / "xdg" / "gtk-3.0" / "settings.ini").read_text()
     assert "gtk-decoration-layout=:minimize,maximize,close" in ini
-    assert "posterfox/xdg/gtk-3.0" in _gen()
+    assert "posterchan/xdg/gtk-3.0" in _gen()
 
 
 def test_private_by_default_no_history_cleared_on_exit_containers_on():
@@ -201,3 +201,14 @@ def test_private_by_default_no_history_cleared_on_exit_containers_on():
     # containers do not work in permanent private browsing, so that mode must stay off
     assert "browser.privatebrowsing.autostart" not in prefs
     assert 'pref("places.history.enabled", false);' in (ROOT / "distribution" / "posterfox-prefs.js").read_text()
+
+
+def test_our_files_never_land_on_the_browser_binary():
+    """The first real build (2026-10-28) compiled for 18 minutes and then died installing: our files went to
+    ${MOZILLA_FIVE_HOME}/posterfox, and with --with-app-name=posterfox that path IS the browser executable
+    ("install: cannot create directory ... /usr/lib64/posterfox/posterfox: File exists")."""
+    import re
+    gen = _gen()
+    dirs = re.findall(r'insinto "\$\{MOZILLA_FIVE_HOME\}/([^"/]+)', gen)
+    assert dirs, "no PosterFox files are installed at all"
+    assert "posterfox" not in dirs and "${PN}" not in dirs, dirs

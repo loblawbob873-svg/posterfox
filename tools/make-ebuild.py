@@ -85,9 +85,9 @@ posterfox_distribution() {
 	doins "${FILESDIR}/posterfox/distribution/autoconfig.js"
 	insinto "${MOZILLA_FIVE_HOME}"
 	doins "${FILESDIR}/posterfox/distribution/posterfox.cfg"
-	insinto "${MOZILLA_FIVE_HOME}/posterfox"
+	insinto "${MOZILLA_FIVE_HOME}/posterchan"
 	doins "${FILESDIR}/posterfox/distribution/posterfox-chrome.css"
-	insinto "${MOZILLA_FIVE_HOME}/posterfox/xdg/gtk-3.0"
+	insinto "${MOZILLA_FIVE_HOME}/posterchan/xdg/gtk-3.0"
 	doins "${FILESDIR}/posterfox/distribution/xdg/gtk-3.0/settings.ini"
 }
 '''
@@ -152,7 +152,7 @@ def wrapper(src: str) -> str:
     # PosterFox's own GTK settings come first in XDG_CONFIG_DIRS (the user's ~/.config still wins).
     return sub(t, '# Run the browser\n',
                '# PosterFox: its own GTK settings first (window buttons like every PosterChan window)\n'
-               'export XDG_CONFIG_DIRS="${MOZILLA_FIVE_HOME}/posterfox/xdg${XDG_CONFIG_DIRS:+:${XDG_CONFIG_DIRS}}"\n\n'
+               'export XDG_CONFIG_DIRS="${MOZILLA_FIVE_HOME}/posterchan/xdg${XDG_CONFIG_DIRS:+:${XDG_CONFIG_DIRS}}"\n\n'
                '# Run the browser\n', what="wrapper gtk settings")
 
 
