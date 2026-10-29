@@ -53,7 +53,8 @@ def test_the_build_is_mozillas_toolchain_with_telemetry_out():
     sh = (ROOT / "tools/portable-build.sh").read_text()
     for opt in ("--enable-bootstrap", "--with-branding=browser/branding/posterfox", "--with-app-name=posterfox",
                 "--with-unsigned-addon-scopes=app,system", "mk_add_options MOZ_TELEMETRY_REPORTING=0",
-                "mk_add_options MOZ_DATA_REPORTING=0", "--disable-crashreporter", "--disable-updater"):
+                "mk_add_options MOZ_DATA_REPORTING=0", "--disable-crashreporter", "--disable-updater",
+                "--disable-lto", "MOZ_PARALLEL_BUILD=6"):
         assert opt in sh, opt
     assert subprocess.run(["bash", "-n", str(ROOT / "tools/portable-build.sh")]).returncode == 0
     # mach must be allowed to fetch the bootstrap's own Python packages (taskcluster): "none" stops configure.
