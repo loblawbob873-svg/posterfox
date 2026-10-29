@@ -13,7 +13,7 @@
 #    here by name), commit it, and DEPLOY with sync.sh like any other change -- that publishes the overlay the VM and
 #    every machine sync. Skipped when the overlay already has that ebuild.
 # 3. BUILD on the PosterChanOS build VM: sync, then `emerge --oneshot --buildpkgonly` (never a plain emerge there: the
-#    VM's disk becomes the ISO). distcc spreads the C/C++ over nas and server1 (the VM's posterfox package.env).
+#    VM's disk becomes the ISO). distcc spreads the C/C++ over nas and server1, set up for that one emerge (see the build step).
 # 4. SIGN on this machine (the key never leaves it), rebuild the binhost index, publish to nas, and confirm the
 #    published index lists the package with a signature.
 #
@@ -147,9 +147,39 @@ say "building $WANT on the build VM"
 # The build settings travel ON THIS COMMAND LINE, never in the VM's /etc/portage: the VM's disk becomes the ISO, so a
 # package.env entry there shipped to every machine installed from it (found in the 2026-10-29 ISO, with a distcc host
 # list naming this LAN). The tree goes to /var/tmp-build (on disk; /var/tmp is a RAM tmpfs), which livecd excludes.
-vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*; PORTAGE_TMPDIR=/var/tmp-build MAKEOPTS=\"-j\$(nproc) -l\$(nproc)\" nice -n 10 emerge --oneshot --buildpkgonly --quiet-build =www-client/$WANT" >>"$LOG" 2>&1 \
+# DISTCC, ON THIS COMMAND LINE TOO ("i have distcc on the hosts for a reason to speed up firefox compile times",
+# 2026-10-29). Portage's FEATURES=distcc only looks for its masquerade directory at /usr/lib/distcc/bin (and is what
+# opens the build's network sandbox to distcc), so: the client lives in /var/tmp-build/distcc (excluded from the ISO,
+# copied from $NAS), its masquerade directory is BIND-MOUNTED onto /usr/lib/distcc/bin for this one emerge, and the
+# mount and the directory go again on every exit -- and at the start, in case a run died. Only hosts whose clang is the
+# VM's exact version are used (an object from another compiler version links, and is wrong); none = a local build.
+DCC=/var/tmp-build/distcc
+vm "umount /usr/lib/distcc/bin 2>/dev/null; rmdir /usr/lib/distcc/bin /usr/lib/distcc 2>/dev/null; mkdir -p $DCC/bin $DCC/state $DCC/masq" >>"$LOG" 2>&1
+ssh -o BatchMode=yes -o ConnectTimeout=20 "$NAS" 'cat /usr/bin/distcc' 2>>"$LOG" | vm "cat > $DCC/bin/distcc.new && chmod 755 $DCC/bin/distcc.new && $DCC/bin/distcc.new --version >/dev/null && mv $DCC/bin/distcc.new $DCC/bin/distcc" >>"$LOG" 2>&1 || true
+# Each host is asked to compile a file holding __clang_version__, and the string it compiled in must be the VM's own:
+# the check is the compiler that will do the work, reached the way the build will reach it.
+CV=$(vm "cd $DCC && printf 'const char v[]=__clang_version__;\n' > probe.c && clang -c probe.c -o probe.o && strings probe.o | grep -m1 -E '^[0-9]+\.[0-9]'" 2>>"$LOG")
+HOSTS="" SLOTS=0
+for h in ${POSTERFOX_DISTCC_HOSTS:-192.168.0.2/12 192.168.122.1/8}; do
+	ip=${h%%/*}
+	got=$(vm "cd $DCC && rm -f probe.o && DISTCC_HOSTS=$ip DISTCC_FALLBACK=0 DISTCC_DIR=$DCC/state $DCC/bin/distcc clang -c probe.c -o probe.o 2>/dev/null && strings probe.o | grep -m1 -E '^[0-9]+\.[0-9]'" 2>/dev/null)
+	if [ -n "$CV" ] && [ "$got" = "$CV" ]; then HOSTS="$HOSTS $h,lzo"; SLOTS=$((SLOTS + ${h##*/}))
+	else say "distcc: not using $ip (it compiled with '${got:-nothing}', the VM's clang is '${CV:-?}')"; fi
+done
+vm "rm -f $DCC/probe.c $DCC/probe.o" 2>/dev/null
+if [ -n "$HOSTS" ]; then
+	say "distcc:$HOSTS"
+	JOBS=$((SLOTS + 4))
+	DISTCC_ENV="FEATURES=distcc DISTCC_HOSTS='$HOSTS localhost/4' DISTCC_DIR=$DCC/state DISTCC_FALLBACK=1 MAKEOPTS=\"-j$JOBS -l\$((\$(nproc)*2))\""
+	DISTCC_UP="for c in \$(cd /usr/lib/llvm && ls -d [0-9]*); do for n in x86_64-pc-linux-gnu-clang-\$c x86_64-pc-linux-gnu-clang++-\$c clang-\$c clang++-\$c; do ln -sfn $DCC/bin/distcc $DCC/masq/\$n; done; done; ln -sfn $DCC/bin/distcc $DCC/masq/clang; ln -sfn $DCC/bin/distcc $DCC/masq/clang++; mkdir -p /usr/lib/distcc/bin && mount --bind $DCC/masq /usr/lib/distcc/bin && trap 'umount /usr/lib/distcc/bin; rmdir /usr/lib/distcc/bin /usr/lib/distcc' EXIT;"
+else
+	say "distcc: no host answered with the VM's clang -- building on the VM alone"
+	DISTCC_ENV="MAKEOPTS=\"-j\$(nproc) -l\$(nproc)\""; DISTCC_UP=""
+fi
+vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*; $DISTCC_UP PORTAGE_TMPDIR=/var/tmp-build $DISTCC_ENV nice -n 10 emerge --oneshot --buildpkgonly --quiet-build =www-client/$WANT" >>"$LOG" 2>&1 \
 	|| { vm "tail -40 \$(ls -t /var/tmp-build/portage/www-client/posterfox-*/temp/build.log 2>/dev/null | head -1)" >>"$LOG" 2>&1 || true
 	     die "the build failed on the VM (tail in $LOG)"; }
+vm "umount /usr/lib/distcc/bin 2>/dev/null; rmdir /usr/lib/distcc/bin /usr/lib/distcc 2>/dev/null; true" >>"$LOG" 2>&1
 GPKG=$(vm "ls -t /var/cache/binpkgs/www-client/posterfox/$WANT-*.gpkg.tar 2>/dev/null | head -1")
 [ -n "$GPKG" ] || die "the VM built nothing at /var/cache/binpkgs/www-client/posterfox/"
 vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*"     # 40 GB that must never reach an ISO
