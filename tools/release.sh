@@ -131,15 +131,28 @@ vm "rm -rf $SMOKE"
 
 # ---------------------------------------------------------------- 4. sign, index, publish
 mkdir -p "$STAGE/www-client/posterfox"
+# A run that stopped after fetching but before signing leaves an UNSIGNED package here; the index below would list it.
+for old in "$STAGE"/www-client/posterfox/*.gpkg.tar; do
+	[ -e "$old" ] || continue
+	tar -tf "$old" | grep -q '\.sig$' || { say "removing an unsigned leftover: $(basename "$old")"; rm -f "$old"; }
+done
 # shellcheck disable=SC2086
 scp -q -o BatchMode=yes ${VM/-J /-o ProxyJump=}:"$GPKG" "$STAGE/www-client/posterfox/" 2>>"$LOG" \
 	|| vm "cat '$GPKG'" > "$STAGE/www-client/posterfox/$(basename "$GPKG")"
 F="$STAGE/www-client/posterfox/$(basename "$GPKG")"
 FPR=$(cat "$HERE/keys/posterchanos-binpkgs.fpr")
-BINPKG_GPG_SIGNING_GPG_HOME="$GNUPGHOME" BINPKG_GPG_SIGNING_KEY="0x$FPR" gpkg-sign "$F" >>"$LOG" 2>&1 || die "signing failed"
+# --allow-unsigned: gpkg-sign first VERIFIES the package with this machine's Portage settings and refuses one that has
+# no signature yet (which every fresh build is). The lock: Portage's default command takes /run/lock/portage-binpkg-gpg.lock,
+# which only root can create; signing is a user job, so the lock lives beside the key.
+BINPKG_GPG_SIGNING_BASE_COMMAND="/usr/bin/flock $GNUPGHOME/.sign.lock /usr/bin/gpg --sign --armor [PORTAGE_CONFIG]" \
+BINPKG_GPG_SIGNING_GPG_HOME="$GNUPGHOME" BINPKG_GPG_SIGNING_KEY="0x$FPR" \
+	gpkg-sign --allow-unsigned "$F" >>"$LOG" 2>&1 || die "signing failed (see $LOG)"
 tar -tf "$F" | grep -q '\.sig$' || die "the package carries no signature after gpkg-sign"
 PKGDIR="$STAGE" emaint binhost --fix >>"$LOG" 2>&1 || die "rebuilding the binhost index failed"
 grep -qx "CPV: www-client/$WANT" "$STAGE/Packages" || die "the new index does not list $WANT"
+for pkg in "$STAGE"/*/*/*.gpkg.tar; do
+	tar -tf "$pkg" | grep -q '\.sig$' || die "refusing to publish an unsigned package: $pkg"
+done
 cp "$HERE/keys/posterchanos-binpkgs.asc" "$STAGE/posterchanos-binpkgs.asc"
 # No --delete: a lost or fresh stage directory must never empty the binhost every machine updates from.
 rsync -a "$STAGE/" "$NAS:$DEST/" || die "publishing to $NAS failed"
