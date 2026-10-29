@@ -49,7 +49,10 @@ PosterFox policy.
 ## 2. The normal case: the timer does it
 
 `tools/release.sh` runs daily on server1, at 07:30 from a user timer. That is after nas.lan's Gentoo mirror sync
-(06:00), so whatever Gentoo changed this morning is seen the same day. Each run:
+(06:00), so whatever Gentoo changed this morning is seen the same day. It does not trust the clock for that: it first checks that nas.lan's
+`emaint.service` finished successfully today (waiting up to 3 h if it is still running), and a deploy already running
+on server1 is waited out (up to 6 h) instead of skipping the day. After a release -- or when the binhost already has
+this version -- it builds the GitHub tarball of the same version if GitHub does not have it yet. Each run:
 
 1. **Decides what should be published.** That is the newest Firefox in the build VM's synced Gentoo tree, at this
    repository's `REVISION`, giving `posterfox-<PV>-r<REV>`. If the binhost already serves exactly that, **and** it was

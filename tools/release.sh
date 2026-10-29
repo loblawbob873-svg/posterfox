@@ -50,9 +50,45 @@ deploying() {
 	for p in $(pgrep -x sync.sh); do pgrep -P "$p" -f wait_apk_build >/dev/null 2>&1 || return 0; done
 	return 1
 }
-if deploying; then
-	say "a deploy is running -- not starting one beside it"; exit 0
-fi
+# AFTER TODAY'S GENTOO SYNC, MEASURED -- not assumed from the clock ("shouldn't the firefox maintenance tasks for the
+# repo run after the daily repo sync?", 2026-10-29). nas.lan's emaint.service starts at 06:00 and took 20 minutes today;
+# the timer fires at 07:30, but a sync that runs long or fails would have been released against yesterday's tree with
+# nothing said. So: wait (up to POSTERFOX_SYNC_WAIT_MIN) until that service last FINISHED today, successfully. If it
+# never does, carry on and say so -- a dead mirror must not stop security releases for good.
+synced_today() {
+	local st exit_ts
+	st=$(ssh -o BatchMode=yes -o ConnectTimeout=20 "$NAS" \
+		'systemctl show emaint.service -p ActiveState --value; systemctl show emaint.service -p ExecMainStatus --value; systemctl show emaint.service -p ExecMainExitTimestamp --value' 2>/dev/null) || return 1
+	[ "$(sed -n 1p <<<"$st")" != activating ] && [ "$(sed -n 1p <<<"$st")" != active ] || return 1
+	[ "$(sed -n 2p <<<"$st")" = 0 ] || return 1
+	exit_ts=$(sed -n 3p <<<"$st"); [ -n "$exit_ts" ] || return 1
+	[ "$(date -d "$exit_ts" +%F 2>/dev/null)" = "$(date +%F)" ]
+}
+waited=0
+until synced_today; do
+	if [ "$waited" -ge "${POSTERFOX_SYNC_WAIT_MIN:-180}" ]; then
+		say "nas.lan's Gentoo sync has not finished today -- going ahead with the tree it has"; break; fi
+	[ "$waited" = 0 ] && say "waiting for nas.lan's daily Gentoo sync to finish"
+	sleep 300; waited=$((waited + 5))
+done
+
+# A RUNNING DEPLOY IS WAITED OUT, not a reason to skip the day: 07:46 on 2026-10-29 found one, logged "not starting one
+# beside it" and the next look was tomorrow's.
+waited=0
+while deploying; do
+	if [ "$waited" -ge "${POSTERFOX_DEPLOY_WAIT_MIN:-360}" ]; then
+		say "a deploy has been running for ${waited} min -- trying again tomorrow"; exit 0; fi
+	[ "$waited" = 0 ] && say "a deploy is running -- waiting for it to finish"
+	sleep 300; waited=$((waited + 5))
+done
+
+# THE GITHUB TARBALL FOLLOWS (tools/portable-release.sh): once this version is on the binhost, the portable build of the
+# same version is made and published if github has not got it yet. Its own log; its failure never fails this run.
+portable_follow() {
+	gh release view "v$PV-r$REV" -R "${POSTERFOX_GITHUB:-loblawbob873-svg/posterfox}" >/dev/null 2>&1 && return 0
+	say "building the portable tarball for github (tools/portable-release.sh, its own log)"
+	"$HERE/tools/portable-release.sh" "$PV" "$REV" >/dev/null 2>&1 || say "the portable build did not publish -- see ~/.cache/posterfox/portable.log"
+}
 
 # ---------------------------------------------------------------- 1. what should be published
 TREE=$(mktemp -d); trap 'rm -rf "$TREE"' EXIT
@@ -65,7 +101,7 @@ say "want $WANT"
 if curl -fsS "$URL/Packages" 2>/dev/null | grep -qx "CPV: www-client/$WANT"; then
 	MOVED=$("$PY" "$HERE/tools/stale_deps.py" --ours "$URL/Packages" --gentoo "$GENTOO_BINHOST/Packages" \
 		--cpv "www-client/$WANT" 2>>"$LOG") || die "could not compare $WANT with Gentoo's binhost (see $LOG)"
-	[ -z "$MOVED" ] && { say "the binhost already serves $WANT, built against today's libraries -- nothing to do"; exit 0; }
+	[ -z "$MOVED" ] && { say "the binhost already serves $WANT, built against today's libraries -- nothing to do"; portable_follow; exit 0; }
 	say "rebuilding $WANT: Gentoo moved $(echo $MOVED)"
 fi
 [ "$DRY" = 1 ] && { say "dry run: would build and publish $WANT"; exit 0; }
@@ -170,7 +206,7 @@ cp "$HERE/keys/posterchanos-binpkgs.asc" "$STAGE/posterchanos-binpkgs.asc"
 # No --delete: a lost or fresh stage directory must never empty the binhost every machine updates from.
 rsync -a "$STAGE/" "$NAS:$DEST/" || die "publishing to $NAS failed"
 for _ in 1 2 3 4 5 6; do   # router.lan serves it over NFS and can briefly cache a stale directory
-	curl -fsS "$URL/Packages" 2>/dev/null | grep -qx "CPV: www-client/$WANT" && { say "published $WANT at $URL"; exit 0; }
+	curl -fsS "$URL/Packages" 2>/dev/null | grep -qx "CPV: www-client/$WANT" && { say "published $WANT at $URL"; portable_follow; exit 0; }
 	sleep 20
 done
 die "published, but $URL/Packages does not list $WANT yet"

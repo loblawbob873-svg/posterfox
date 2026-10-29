@@ -3,6 +3,7 @@ Description=PosterFox: daily release check
 
 [Timer]
 # After nas.lan's daily Gentoo mirror sync (emaint.timer, 06:00), so a library that moved this morning is seen today.
+# release.sh also CHECKS that the sync finished today (and waits for it, and for a running deploy) rather than trusting the clock.
 OnCalendar=*-*-* 07:30:00
 RandomizedDelaySec=20m
 Persistent=true
