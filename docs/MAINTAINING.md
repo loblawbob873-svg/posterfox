@@ -46,15 +46,24 @@ PosterFox policy.
 
 ## 2. The normal case: the timer does it
 
-`tools/release.sh` runs daily on server1, at 03:30 from a user timer. Each run:
+`tools/release.sh` runs daily on server1, at 07:30 from a user timer. That is after nas.lan's Gentoo mirror sync
+(06:00), so whatever Gentoo changed this morning is seen the same day. Each run:
 
 1. **Decides what should be published.** That is the newest Firefox in the build VM's synced Gentoo tree, at this
-   repository's `REVISION`, giving `posterfox-<PV>-r<REV>`. If the binhost already serves exactly that, the run stops:
-   nothing to do.
+   repository's `REVISION`, giving `posterfox-<PV>-r<REV>`. If the binhost already serves exactly that, **and** it was
+   linked against the libraries Gentoo's binhost serves today, the run stops: nothing to do.
+
+   The second half matters. A binary records the exact library versions it was built for (icu, ffmpeg, libvpx,
+   dav1d...). When Gentoo moves one of them, every machine's next system update installs the new library and then
+   **refuses our binary and compiles Firefox from source**. `tools/stale_deps.py` compares the published build with
+   Gentoo's binhost index. If anything moved, the run rebuilds the same version as a new build of it, and machines
+   pick that up.
 2. **Regenerates the overlay package** in the posterchanai checkout. Tests run first, then the overlay's own checks.
    It commits the package and **deploys** it with `sync.sh` like any other change, which publishes the overlay.
-3. **Builds on the build VM** with `emerge --oneshot --buildpkgonly`, spreading the C/C++ over nas.lan and server1
-   with distcc.
+3. **Builds on the build VM.** First it updates PosterFox's libraries on the VM to what Gentoo's binhost serves
+   (binaries only). `--buildpkgonly` links against what the VM has installed, so without this a new build could be
+   stale on the day it is published. Then `emerge --oneshot --buildpkgonly`, spreading the C/C++ over nas.lan and
+   server1 with distcc.
 4. **Signs** the package on server1 (the key never leaves it), rebuilds the binhost index, publishes it to nas, and
    confirms the public index lists the new package.
 
@@ -196,7 +205,11 @@ machines: the same profile, USE flags, CHOST and `-march=x86-64-v3`. Its PosterF
 `https://gentoo.poster.place/posterchan-binpkgs/`. nas mirrors Gentoo's distfiles into `/raid/distfiles` with
 `rsync --delete` every morning. That job excludes this directory (`/opt/admintools/admintools/servers.py`, commit
 `da4d260`), exactly as it excludes the overlay. **Any new directory in that tree needs the same exclusion**, or it
-is deleted every day at 06:00.
+is deleted every day at 06:00. Publishing never uses `--delete` either: a lost stage directory on server1 must not
+empty the binhost.
+
+**Machines** get PosterFox updates from `update-posterchan`, which runs `emerge -u --usepkgonly` for it on every update.
+If there is no newer binary yet, it keeps the installed browser; it never compiles it.
 
 ---
 

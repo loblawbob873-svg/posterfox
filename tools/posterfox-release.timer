@@ -2,7 +2,8 @@
 Description=PosterFox: daily release check
 
 [Timer]
-OnCalendar=*-*-* 03:30:00
+# After nas.lan's daily Gentoo mirror sync (emaint.timer, 06:00), so a library that moved this morning is seen today.
+OnCalendar=*-*-* 07:30:00
 RandomizedDelaySec=20m
 Persistent=true
 

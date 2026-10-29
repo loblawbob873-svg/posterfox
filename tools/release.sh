@@ -5,7 +5,10 @@
 #   tools/release.sh --dry-run  say what would happen and stop
 #
 # 1. WHAT SHOULD BE PUBLISHED: the newest Firefox in the tree PosterChanOS machines sync (the build VM's), at this
-#    repo's REVISION -> posterfox-<PV>-r<REV>. If the binhost already serves exactly that, stop here: nothing to do.
+#    repo's REVISION -> posterfox-<PV>-r<REV>. If the binhost already serves exactly that AND it was linked against the
+#    libraries Gentoo's binhost serves today (tools/stale_deps.py), stop here: nothing to do. A library that moved
+#    (nas.lan's 06:00 sync brings icu 79, a new ffmpeg ABI...) makes Portage refuse our binary on every machine that
+#    updates and compile Firefox from source instead, so that is rebuilt too -- same version, a new build of it.
 # 2. OVERLAY: regenerate www-client/posterfox in the posterchanai checkout (tests first; a changed Gentoo ebuild stops
 #    here by name), commit it, and DEPLOY with sync.sh like any other change -- that publishes the overlay the VM and
 #    every machine sync. Skipped when the overlay already has that ebuild.
@@ -23,6 +26,7 @@ VM=${POSTERFOX_VM:-"-J nas.lan root@192.168.122.32"}
 NAS=${NAS:-nas.lan}
 DEST=${DEST:-/raid/distfiles/distfiles/posterchan-binpkgs}
 URL=${BINHOST_URL:-https://gentoo.poster.place/posterchan-binpkgs}
+GENTOO_BINHOST=${GENTOO_BINHOST:-https://gentoo.poster.place/releases/amd64/binpackages/23.0/x86-64}
 STAGE=${STAGE:-$HOME/.cache/posterfox/binhost}
 export GNUPGHOME="${POSTERFOX_GNUPG:-$HOME/.config/posterfox/gnupg}"
 PY=${PYTHON:-$PCAI/venv-unified/bin/python}
@@ -47,7 +51,10 @@ REV=$(cat "$HERE/REVISION")
 WANT="posterfox-$PV-r$REV"
 say "want $WANT"
 if curl -fsS "$URL/Packages" 2>/dev/null | grep -qx "CPV: www-client/$WANT"; then
-	say "the binhost already serves $WANT -- nothing to do"; exit 0
+	MOVED=$("$PY" "$HERE/tools/stale_deps.py" --ours "$URL/Packages" --gentoo "$GENTOO_BINHOST/Packages" \
+		--cpv "www-client/$WANT" 2>>"$LOG") || die "could not compare $WANT with Gentoo's binhost (see $LOG)"
+	[ -z "$MOVED" ] && { say "the binhost already serves $WANT, built against today's libraries -- nothing to do"; exit 0; }
+	say "rebuilding $WANT: Gentoo moved $(echo $MOVED)"
 fi
 [ "$DRY" = 1 ] && { say "dry run: would build and publish $WANT"; exit 0; }
 
@@ -75,6 +82,11 @@ if ! vm_has; then
 fi
 
 # ---------------------------------------------------------------- 3. build on the VM
+# --buildpkgonly links against what the VM HAS, not what the tree offers: bring every library PosterFox depends on up to
+# what Gentoo's binhost serves (binaries only, never a compile), or the new build is stale the day it is published.
+say "updating PosterFox's libraries on the build VM"
+vm "emerge --oneshot --update --onlydeps --onlydeps-with-rdeps=y --usepkgonly --getbinpkg --quiet =www-client/$WANT" >>"$LOG" 2>&1 \
+	|| die "could not update PosterFox's libraries on the VM from Gentoo's binhost (see $LOG)"
 say "building $WANT on the build VM"
 vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*; nice -n 10 emerge --oneshot --buildpkgonly --quiet-build =www-client/$WANT" >>"$LOG" 2>&1 \
 	|| { vm "tail -40 \$(ls -t /var/tmp-build/portage/www-client/posterfox-*/temp/build.log 2>/dev/null | head -1)" >>"$LOG" 2>&1 || true
@@ -95,7 +107,8 @@ tar -tf "$F" | grep -q '\.sig$' || die "the package carries no signature after g
 PKGDIR="$STAGE" emaint binhost --fix >>"$LOG" 2>&1 || die "rebuilding the binhost index failed"
 grep -qx "CPV: www-client/$WANT" "$STAGE/Packages" || die "the new index does not list $WANT"
 cp "$HERE/keys/posterchanos-binpkgs.asc" "$STAGE/posterchanos-binpkgs.asc"
-rsync -a --delete "$STAGE/" "$NAS:$DEST/" || die "publishing to $NAS failed"
+# No --delete: a lost or fresh stage directory must never empty the binhost every machine updates from.
+rsync -a "$STAGE/" "$NAS:$DEST/" || die "publishing to $NAS failed"
 for _ in 1 2 3 4 5 6; do   # router.lan serves it over NFS and can briefly cache a stale directory
 	curl -fsS "$URL/Packages" 2>/dev/null | grep -qx "CPV: www-client/$WANT" && { say "published $WANT at $URL"; exit 0; }
 	sleep 20
