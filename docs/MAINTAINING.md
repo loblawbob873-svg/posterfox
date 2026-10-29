@@ -47,7 +47,10 @@ and regenerate. `emerge -pv --oneshot www-client/posterfox` on the build VM find
 Open `tools/make-ebuild.py`, look at the named edit and the new Gentoo ebuild, and adjust that one substitution.
 Every edit is listed in `transform()`. Never edit the generated ebuild by hand: the next update overwrites it.
 
-uBlock Origin: bump `pins.json` (`ublock_origin`) to a new release tag, then run `update.sh`.
+uBlock Origin and Privacy Badger: bump their pins in `pins.json` (`ublock_origin` = the GitHub release tag;
+`privacy_badger` + `privacy_badger_amo_file` = the version and file id from
+`https://addons.mozilla.org/api/v5/addons/addon/privacy-badger17/`), then run `update.sh`. Check the downloaded
+file's sha256 against the hash AMO lists.
 
 A change to PosterFox itself (branding, prefs, policies, the chrome CSS) bumps `REVISION`, which becomes the
 ebuild's `-rN`, so installed machines pick it up on their next `emerge -u`.
@@ -61,11 +64,14 @@ CHOST.
 
 ```
 ssh -J nas.lan root@192.168.122.32
-update-posterchan                         # the overlay with the new posterfox ebuild
-echo 'www-client/posterfox ~amd64' > /etc/portage/package.accept_keywords/posterfox
-FEATURES="distcc buildpkg" PORTAGE_TMPDIR=/var/tmp/posterfox-build \
-  emerge --oneshot --buildpkg www-client/posterfox
+emaint sync -r gentoo -r posterchan            # the overlay a deploy published, with the new posterfox ebuild
+emerge --oneshot --buildpkgonly www-client/posterfox
 ```
+
+The VM's `/etc/portage/env/posterfox-build.conf` (via `package.env`) gives this one package `FEATURES=distcc`,
+`MAKEOPTS=-j30` and `PORTAGE_TMPDIR=/var/tmp-build`; `/etc/distcc/hosts` names nas.lan and server1. Portage's own
+distcc setup does the rest. `--buildpkgonly` matters: the VM's disk becomes the ISO, so PosterFox must be PACKAGED
+there, never installed.
 
 distcc spreads the C/C++ compiles over server1, router.lan and nas.lan (their `/etc/distcc/hosts`). Rust is most of
 Firefox and does not distribute, so plan on a long build either way. `PORTAGE_TMPDIR` must have about 40 GB free and

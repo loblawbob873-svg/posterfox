@@ -168,3 +168,14 @@ def test_bundled_libs_are_off_by_default():
     t = _gen()
     for flag in json.loads((ROOT / "pins.json").read_text())["bundled_libs"]:
         assert "+" + flag not in t and re.search(r"\b" + re.escape(flag) + r"\b", t), flag
+
+
+
+def test_privacy_badger_is_fetched_pinned_and_forced_like_ublock():
+    t = _gen()
+    pins = json.loads((ROOT / "pins.json").read_text())
+    assert 'POSTERFOX_PB="%s"' % pins["privacy_badger"] in t
+    assert "privacy_badger17-${POSTERFOX_PB}.xpi -> posterfox-privacybadger-${POSTERFOX_PB}.xpi" in t
+    assert 'jid1-MnnxcxisBPnSXQ@jetpack.xpi' in t
+    pol = json.loads((ROOT / "distribution" / "policies.json").read_text())["policies"]["ExtensionSettings"]
+    assert pol["jid1-MnnxcxisBPnSXQ@jetpack"]["installation_mode"] == "force_installed"

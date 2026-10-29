@@ -5,7 +5,7 @@
 - **PosterFox branding**, and a window that looks like the rest of the PosterChan desktop: the cyberpunk theme, neon
   edges and the same window controls.
 - **No telemetry, compiled out.** It isn't merely switched off; the reporting code isn't in the build.
-- **uBlock Origin** built in.
+- **uBlock Origin** and **Privacy Badger** built in.
 - **PosterChan AI in the AI sidebar.** Firefox's own AI panel opens your PosterChan instance's AI chat. "Summarize
   this page" and the other prompts land in the box for you to read and send.
 - **Your Firefox profile carries over.** Passwords, bookmarks and history stay where Firefox keeps them.
