@@ -16,7 +16,10 @@
   this page" and the other prompts land in the box for you to read and send.
 - **Your Firefox profile carries over.** Passwords, bookmarks and history stay where Firefox keeps them.
 
-Coming next: **Tor tabs** through PosterChanOS's Tor.
+- **Tor tabs.** Right-click a tab → *New Tor tab*, right-click a link → *Open link in a Tor tab*, or Alt+Shift+T: a
+  container whose every request (DNS too) goes through this machine's Tor (SOCKS 9050, or Tor Browser's 9150). With
+  Tor off it fails, never falls back to a direct connection. It hides your address; it is not Tor Browser's
+  anti-fingerprinting.
 
 PosterFox is not affiliated with or endorsed by Mozilla. Firefox is a trademark of the Mozilla Foundation.
 

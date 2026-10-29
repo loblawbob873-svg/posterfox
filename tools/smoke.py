@@ -109,6 +109,15 @@ try { const {AboutNewTab} = ChromeUtils.importESModule("resource:///modules/Abou
 } catch (e) { return null; }
 """
 NEWTAB = ["https://poster.place/", "/posterchanai", "/posterfox", "addons.mozilla.org/firefox/addon/posterchan-passwords/"]
+TOR_OPEN = r"""
+const {ContextualIdentityService} = ChromeUtils.importESModule('moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs');
+const w = Services.wm.getMostRecentWindow('navigator:browser'), sp = Services.scriptSecurityManager.getSystemPrincipal();
+const tor = ContextualIdentityService.create('PosterFox Tor tab 990', 'fingerprint', 'purple');
+const plain = ContextualIdentityService.create('PosterFox tab 991', 'circle', 'blue');
+for (const [c, u] of [[tor, arguments[0]], [plain, arguments[1]]])
+  w.gBrowser.addTab(u, { userContextId: c.userContextId, triggeringPrincipal: sp });
+return true;
+"""
 CHROME_ADDONS = r"""
 const done = arguments[arguments.length - 1];
 const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
@@ -133,6 +142,40 @@ for (let i = 0; i < 2; i++)
   win.gBrowser.addTab("about:blank", { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
 setTimeout(() => done({ before, tabs: [...win.gBrowser.tabs].map(t => t.userContextId) }), 4000);
 """
+
+
+def _local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("192.0.2.1", 9))                          # no packet is sent: this only picks the outgoing address
+        return s.getsockname()[0]
+    finally:
+        s.close()
+
+
+def _tor_check(m):
+    seen = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(self.path)
+            self.send_response(200); self.send_header("Content-Length", "2"); self.end_headers(); self.wfile.write(b"ok")
+
+        def log_message(self, *a):
+            pass
+    srv = http.server.ThreadingHTTPServer(("0.0.0.0", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        base = "http://%s:%d" % (_local_ip(), srv.server_address[1])
+        m.js(TOR_OPEN, [base + "/tor-tab", base + "/plain-tab"])
+        for _ in range(20):
+            if "/plain-tab" in seen:
+                break
+            time.sleep(0.5)
+        time.sleep(4)                                           # long enough for a leak to arrive too
+        return {"plain": "/plain-tab" in seen, "leaked": "/tor-tab" in seen}
+    finally:
+        srv.shutdown()
 
 
 def main(argv):
@@ -172,6 +215,10 @@ def main(argv):
             report["startup"] = m.js(CHROME_TABS)
             report["addons"] = m.js(CHROME_ADDONS, asynchronous=True)
             report["containers"] = m.js(CHROME_CONTAINERS, asynchronous=True)
+            # TOR TABS NEVER GO DIRECT: a Tor tab and an ordinary one both ask for a page on this machine's own
+            # (non-loopback) address. Without Tor the Tor tab must fail; with Tor, Tor cannot reach a private
+            # address either -- so in both cases only the ordinary tab may arrive.
+            report["tor"] = _tor_check(m)
             report["newtab"] = None
             for _ in range(20):                               # the new tab's feed initialises a moment after start
                 report["newtab"] = m.js(CHROME_NEWTAB)
@@ -216,6 +263,9 @@ def main(argv):
         ads = {a["id"]: a for a in report.get("addons") or [] if isinstance(a, dict)}
         for aid, name in ADDONS.items():
             need(aid in ads and ads[aid]["active"], name + " is missing or disabled")
+        t = report.get("tor") or {}
+        need(t.get("plain") is True, "the Tor tab check did not run (the ordinary tab never arrived): %s" % t)
+        need(t.get("leaked") is False, "a TOR TAB REACHED THE NETWORK DIRECTLY")
         tiles = report.get("newtab") or []
         need(len(tiles) == len(NEWTAB) and all(any(t.endswith(w) or w in t for t in tiles) for w in NEWTAB),
              "the new tab's shortcuts are not PosterChan's (%s)" % tiles)

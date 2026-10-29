@@ -48,3 +48,9 @@ pref("privacy.userContext.enabled", true);
 pref("privacy.userContext.ui.enabled", true);
 pref("browser.sessionstore.resume_from_crash", false);
 pref("browser.startup.page", 1);
+
+// TOR TABS FAIL CLOSED (extensions/tab-containers/tor.js): when a proxy cannot be reached Firefox may otherwise retry the
+// request DIRECTLY -- for a Tor tab that is the one thing that must never happen. And WebRTC in a page loaded through a
+// proxy uses only that proxy, so a Tor tab's page cannot reveal the address over UDP.
+pref("network.proxy.failover_direct", false);
+pref("media.peerconnection.ice.proxy_only_if_behind_proxy", true);

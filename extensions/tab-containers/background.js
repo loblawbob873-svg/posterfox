@@ -5,11 +5,52 @@
   const moving = new Set();        // default-store tabs being replaced (so they are not handled twice)
   let n = 0;
 
-  async function fresh() {
-    const id = await browser.contextualIdentities.create({ name: C.NAME + ' ' + (++n), color: C.colorFor(n), icon: 'circle' });
+  const tor = new Set();            // the ones that are Tor tabs (tor.js): their requests go through Tor
+  async function fresh(isTor) {
+    const id = await browser.contextualIdentities.create(isTor
+      ? { name: PFTor.NAME + ' ' + (++n), color: 'purple', icon: 'fingerprint' }
+      : { name: C.NAME + ' ' + (++n), color: C.colorFor(n), icon: 'circle' });
     ours.add(id.cookieStoreId);
+    if (isTor) tor.add(id.cookieStoreId);
     return id.cookieStoreId;
   }
+
+  // ---- Tor tabs (tor.js) ----
+  // A Tor container made anywhere (another window of this profile, the release check) is a Tor container here too.
+  if (browser.contextualIdentities.onCreated) browser.contextualIdentities.onCreated.addListener(info => {
+    const c = info && info.contextualIdentity;
+    if (c && PFTor.isTorName(c.name)) { ours.add(c.cookieStoreId); tor.add(c.cookieStoreId); }
+  });
+  if (browser.proxy && browser.proxy.onRequest)
+    browser.proxy.onRequest.addListener(details => PFTor.route(details, tor), { urls: ['<all_urls>'] });
+  async function openTor(url, from) {
+    const store = await fresh(true);
+    const opts = { cookieStoreId: store, active: true };
+    if (from) { opts.index = from.index + 1; opts.windowId = from.windowId; }
+    if (PFTor.openable(url)) opts.url = url;
+    return browser.tabs.create(opts);
+  }
+  let torSaid = 0;
+  if (browser.proxy && browser.proxy.onError) browser.proxy.onError.addListener(() => {
+    // A Tor tab whose Tor is not running fails -- by design -- and says why, at most once a minute.
+    if (!tor.size || Date.now() - torSaid < 60000 || !browser.notifications) return;
+    torSaid = Date.now();
+    browser.notifications.create('pf-tor', { type: 'basic', title: 'Tor is not running',
+      message: 'The Tor tab could not connect. Turn Tor on (on PosterChanOS: the Tor switch in the tray), then reload. Nothing was sent without it.' }).catch(() => {});
+  });
+  if (browser.menus) {
+    browser.menus.create({ id: 'pf-tor-new', title: 'New Tor tab', contexts: ['tab'] });
+    browser.menus.create({ id: 'pf-tor-link', title: 'Open link in a Tor tab', contexts: ['link'] });
+    browser.menus.onClicked.addListener((info, tab) => {
+      if (info.menuItemId === 'pf-tor-new') openTor('', tab);
+      else if (info.menuItemId === 'pf-tor-link') openTor(info.linkUrl, tab);
+    });
+  }
+  if (browser.commands) browser.commands.onCommand.addListener(async (c) => {
+    if (c !== 'new-tor-tab') return;
+    const [cur] = await browser.tabs.query({ active: true, currentWindow: true });
+    openTor('', cur);
+  });
   async function replace(tab, url) {
     if (moving.has(tab.id)) return;
     moving.add(tab.id);
@@ -57,7 +98,7 @@
     const tabs = await browser.tabs.query({});
     const used = new Set(tabs.map(t => t.cookieStoreId));
     for (const store of [...ours]) {
-      if (!used.has(store)) { ours.delete(store); browser.contextualIdentities.remove(store).catch(() => {}); }
+      if (!used.has(store)) { ours.delete(store); tor.delete(store); browser.contextualIdentities.remove(store).catch(() => {}); }
     }
   });
 
@@ -66,8 +107,11 @@
     const [ids, tabs] = await Promise.all([browser.contextualIdentities.query({}), browser.tabs.query({})]);
     const used = new Set(tabs.map(t => t.cookieStoreId));
     for (const id of ids) {
-      if (!id.name.startsWith(C.NAME + ' ')) continue;
-      if (used.has(id.cookieStoreId)) { ours.add(id.cookieStoreId); n = Math.max(n, parseInt(id.name.slice(C.NAME.length + 1), 10) || 0); }
+      const isTor = PFTor.isTorName(id.name);
+      if (!isTor && !id.name.startsWith(C.NAME + ' ')) continue;
+      const base = isTor ? PFTor.NAME : C.NAME;
+      if (used.has(id.cookieStoreId)) { ours.add(id.cookieStoreId); if (isTor) tor.add(id.cookieStoreId);
+        n = Math.max(n, parseInt(id.name.slice(base.length + 1), 10) || 0); }
       else browser.contextualIdentities.remove(id.cookieStoreId).catch(() => {});
     }
     /* THE START-UP TABS ARE JUDGED AFTER THEY SETTLE. Measured on the build VM: at the moment this ran, the first tab of

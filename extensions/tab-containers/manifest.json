@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "PosterFox Tab Containers",
-  "version": "1.1.1",
-  "description": "Every tab is its own temporary container (its own cookies and storage, deleted when the tab closes), and tabs left alone for two minutes go to sleep.",
+  "version": "1.2.0",
+  "description": "Every tab is its own temporary container (its own cookies and storage, deleted when the tab closes), Tor tabs that go through this machine's Tor, and tabs left alone for two minutes go to sleep.",
   "browser_specific_settings": {
     "gecko": {
       "id": "tab-containers@posterfox.poster.place",
@@ -15,13 +15,25 @@
     "tabs",
     "webRequest",
     "webRequestBlocking",
+    "proxy",
+    "menus",
+    "notifications",
     "<all_urls>"
   ],
   "background": {
     "scripts": [
       "containers.js",
+      "tor.js",
       "background.js",
       "tabsleep.js"
     ]
+  },
+  "commands": {
+    "new-tor-tab": {
+      "suggested_key": {
+        "default": "Alt+Shift+T"
+      },
+      "description": "New Tor tab"
+    }
   }
 }

@@ -41,7 +41,7 @@ const browser = {
   webRequest: { onBeforeRequest: { addListener: f => { L.req = f; } } },
 };
 const ctx = vm.createContext({ browser, console, Set, Promise, parseInt, setTimeout });
-vm.runInContext(fs.readFileSync(EXT + '/containers.js', 'utf8') + '\n' + fs.readFileSync(EXT + '/background.js', 'utf8'), ctx);
+vm.runInContext(['containers.js', 'tor.js', 'background.js'].map(f => fs.readFileSync(EXT + '/' + f, 'utf8')).join('\n'), ctx);
 const tick = () => new Promise(r => setTimeout(r, 20));
 (async () => {
   await tick();
@@ -190,3 +190,30 @@ def test_settings_and_add_on_pages_open_and_are_never_replaced_by_an_empty_tab(p
       const t = await browser.tabs.create({ status: %s, url: 'about:blank' }); await tick();
       await finish(t.id, %s); await new Promise(r => setTimeout(r, 1700));""" % (json.dumps(reported), json.dumps(page)))
     assert [t["url"] for t in r["tabs"]] == [page], ("the page was replaced, or a spare tab was opened", r["tabs"])
+
+
+def test_a_tor_tabs_requests_go_to_tor_and_no_other_tab_is_touched():
+    """"yes, build the Tor tabs too" (2026-10-29). The decision itself (tor.js), and the manifest that makes it run."""
+    js = """
+const T = require(%s);
+const tor = new Set(['firefox-container-7']);
+console.log(JSON.stringify({ tor: T.route({ cookieStoreId: 'firefox-container-7' }, tor),
+  other: T.route({ cookieStoreId: 'firefox-container-8' }, tor) === undefined,
+  plain: T.route({ cookieStoreId: 'firefox-default' }, tor) === undefined,
+  name: [T.isTorName('PosterFox Tor tab 3'), T.isTorName('PosterFox tab 3')],
+  open: [T.openable('https://a.example/'), T.openable('about:preferences')] }));
+""" % json.dumps(str(EXT / "tor.js"))
+    r = json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=30).stdout)
+    assert [(p["type"], p["host"], p["port"], p["proxyDNS"]) for p in r["tor"]] == \
+        [("socks", "127.0.0.1", 9050, True), ("socks", "127.0.0.1", 9150, True)]
+    assert not any(p["type"] == "direct" for p in r["tor"]), "a Tor tab could fall back to the direct connection"
+    assert r["other"] and r["plain"] and r["name"] == [True, False] and r["open"] == [True, False]
+    m = json.loads((EXT / "manifest.json").read_text())
+    assert {"proxy", "menus"} <= set(m["permissions"]) and "tor.js" in m["background"]["scripts"]
+    assert m["commands"]["new-tor-tab"]["suggested_key"]["default"] == "Alt+Shift+T"
+    prefs = (ROOT / "distribution" / "posterfox-prefs.js").read_text()
+    assert 'pref("network.proxy.failover_direct", false);' in prefs
+    assert 'pref("media.peerconnection.ice.proxy_only_if_behind_proxy", true);' in prefs
+    # The release check opens a Tor tab and an ordinary one against this machine's address and fails on a leak
+    # (measured against the add-on before Tor tabs: leaked true).
+    assert "a TOR TAB REACHED THE NETWORK DIRECTLY" in (ROOT / "tools" / "smoke.py").read_text()
