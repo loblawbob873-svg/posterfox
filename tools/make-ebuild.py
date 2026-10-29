@@ -129,6 +129,9 @@ def transform(src: str, rev: int) -> str:
     t = sub(t, 'local icon_srcdir="${S}/browser/branding/official"', 'local icon_srcdir="${S}/browser/branding/posterfox"',
             what="icons")
     t = sub(t, 'local app_name="Mozilla ${MOZ_PN^}"', 'local app_name="PosterFox"', what="desktop name")
+    # The desktop-entry TEMPLATE is Gentoo's (files/icon/firefox-r3.desktop, @NAME@/@EXEC@/@ICON@ filled in below); the
+    # ebuild names it by ${PN}, which is posterfox here -- a file that does not exist (the r7 build died on it).
+    t = resub(t, r'"\$\{FILESDIR\}/icon/\$\{PN\}-(r\d+\.desktop)"', r'"${FILESDIR}/icon/firefox-\1"', "desktop template")
     # PosterFox installs to its own paths, so it may sit beside a stock Firefox: no blockers. firefox-l10n puts its
     # language packs into /usr/lib64/firefox, which PosterFox never reads, so it is not pulled in either.
     t = sub(t, 'FF_ONLY_DEPEND="!www-client/firefox:0\n\t', 'FF_ONLY_DEPEND="', what="firefox:0 blocker")

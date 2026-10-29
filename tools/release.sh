@@ -114,6 +114,21 @@ GPKG=$(vm "ls -t /var/cache/binpkgs/www-client/posterfox/$WANT-*.gpkg.tar 2>/dev
 [ -n "$GPKG" ] || die "the VM built nothing at /var/cache/binpkgs/www-client/posterfox/"
 vm "rm -rf /var/tmp-build/portage/www-client/posterfox-*"     # 40 GB that must never reach an ISO
 
+# ---------------------------------------------------------------- 3b. use it before anybody gets it
+# The built package, unpacked on the VM and started headless as an ordinary user (tools/smoke.py over Marionette): its
+# name, policies, add-ons, privacy defaults, window stylesheet, codecs and per-tab containers. Any failure stops here,
+# before the package is signed -- "it compiled" is not "it works" (r6 and r7 compiled and could not be installed).
+say "checking the built browser"
+SMOKE=/var/tmp-build/posterfox-smoke
+vm "rm -rf $SMOKE && mkdir -p $SMOKE/pkg $SMOKE/root && tar -xf '$GPKG' -C $SMOKE/pkg && tar -xf \$(ls $SMOKE/pkg/*/image.tar.*) -C $SMOKE/root \
+    && (id posterfoxtest >/dev/null 2>&1 || useradd -m posterfoxtest) && chmod -R o+rX $SMOKE" >>"$LOG" 2>&1 \
+	|| die "could not unpack the built package on the VM to check it (see $LOG)"
+vm "cat > $SMOKE/smoke.py" <"$HERE/tools/smoke.py"
+if ! vm "su posterfoxtest -c 'cd /tmp && timeout 300 python3 $SMOKE/smoke.py $SMOKE/root/image/usr/lib64/posterfox/posterfox'" >>"$LOG" 2>&1; then
+	vm "rm -rf $SMOKE"; die "the built browser failed its checks (the report is in $LOG) -- nothing published"
+fi
+vm "rm -rf $SMOKE"
+
 # ---------------------------------------------------------------- 4. sign, index, publish
 mkdir -p "$STAGE/www-client/posterfox"
 # shellcheck disable=SC2086

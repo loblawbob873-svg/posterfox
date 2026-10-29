@@ -212,3 +212,23 @@ def test_our_files_never_land_on_the_browser_binary():
     dirs = re.findall(r'insinto "\$\{MOZILLA_FIVE_HOME\}/([^"/]+)', gen)
     assert dirs, "no PosterFox files are installed at all"
     assert "posterfox" not in dirs and "${PN}" not in dirs, dirs
+
+
+def test_every_file_the_ebuild_reads_from_filesdir_exists():
+    """r7 died installing on `${FILESDIR}/icon/${PN}-r3.desktop` (PN=posterfox; the template is firefox-r3.desktop).
+    Every literal ${FILESDIR} path the generated ebuild reads must name a file the package ships."""
+    import re
+    gen = _gen()
+    shipped = set()
+    for p in (FIX / "firefox-files").rglob("*"):
+        if p.is_file():
+            shipped.add(str(p.relative_to(FIX / "firefox-files")))
+    shipped |= {"posterfox-r1.sh"}           # written by the generator from files/firefox-r1.sh
+    refs = set()
+    for m in re.finditer(r'\$\{FILESDIR\}"?/([A-Za-z0-9_./${}-]+)', gen):
+        path = m.group(1).rstrip('"').replace("${PN}", "posterfox")
+        if "posterfox/" in path or "${" in path or path.startswith("posterfox/"):
+            continue                          # our own payload (assembled separately) or a computed name
+        refs.add(path)
+    missing = sorted(r for r in refs if r not in shipped)
+    assert not missing, missing
