@@ -30,6 +30,7 @@ GENTOO_BINHOST=${GENTOO_BINHOST:-https://gentoo.poster.place/releases/amd64/binp
 STAGE=${STAGE:-$HOME/.cache/posterfox/binhost}
 export GNUPGHOME="${POSTERFOX_GNUPG:-$HOME/.config/posterfox/gnupg}"
 PY=${PYTHON:-$PCAI/venv-unified/bin/python}
+PYTHON_SYS=${PYTHON_SYS:-/usr/bin/python3}   # the system Python: Portage's modules are not in the app's venv
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 LOG=$HOME/.cache/posterfox/release.log; mkdir -p "$(dirname "$LOG")"
 say() { echo "[posterfox $(date +%H:%M:%S)] $*" | tee -a "$LOG"; }
@@ -148,7 +149,15 @@ BINPKG_GPG_SIGNING_BASE_COMMAND="/usr/bin/flock $GNUPGHOME/.sign.lock /usr/bin/g
 BINPKG_GPG_SIGNING_GPG_HOME="$GNUPGHOME" BINPKG_GPG_SIGNING_KEY="0x$FPR" \
 	gpkg-sign --allow-unsigned "$F" >>"$LOG" 2>&1 || die "signing failed (see $LOG)"
 tar -tf "$F" | grep -q '\.sig$' || die "the package carries no signature after gpkg-sign"
-PKGDIR="$STAGE" emaint binhost --fix >>"$LOG" 2>&1 || die "rebuilding the binhost index failed"
+# THE INDEX, through Portage's own handler. Two things about this machine's Portage would otherwise drop the package
+# from it without a word (measured): it VERIFIES every signed package it reads, with /etc/portage/gnupg, which does not
+# hold our key -- so the verify keyring is the release keyring, where the key is trusted; and the `emaint` command-line
+# wrapper did nothing at all here (PACKAGES: 0, exit 0) where the same handler, called directly, indexes the package.
+BINPKG_GPG_VERIFY_GPG_HOME="$GNUPGHOME" PKGDIR="$STAGE" "$PYTHON_SYS" -c '
+import sys
+from portage.emaint.modules.binhost.binhost import BinhostHandler
+ok, err = BinhostHandler().fix()
+sys.exit(0 if ok else 1)' >>"$LOG" 2>&1 || die "rebuilding the binhost index failed (see $LOG)"
 grep -qx "CPV: www-client/$WANT" "$STAGE/Packages" || die "the new index does not list $WANT"
 for pkg in "$STAGE"/*/*/*.gpkg.tar; do
 	tar -tf "$pkg" | grep -q '\.sig$' || die "refusing to publish an unsigned package: $pkg"
