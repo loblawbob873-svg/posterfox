@@ -232,3 +232,11 @@ def test_every_file_the_ebuild_reads_from_filesdir_exists():
         refs.add(path)
     missing = sorted(r for r in refs if r not in shipped)
     assert not missing, missing
+
+
+def test_no_bundled_add_on_opens_a_welcome_tab():
+    """Privacy Badger opens its own first-run page; a first start with a link then showed TWO tabs (measured on the
+    build VM). Its managed-storage setting turns that off, through the enterprise policies."""
+    import json
+    pol = json.loads((ROOT / "distribution" / "policies.json").read_text())["policies"]
+    assert pol["3rdparty"]["Extensions"]["jid1-MnnxcxisBPnSXQ@jetpack"]["showIntroPage"] is False

@@ -25,7 +25,16 @@ var PFContainers = (function () {
     const u = tab.url || '';
     return u === 'about:newtab' || u === 'about:home' || u === 'about:blank' || u === '';
   }
+  /** A tab that already SHOWS a web page in the default store -- one that loaded before this add-on was running (the
+   *  first tab of a browser started with a link). It is reopened in a container of its own, at its address; file:,
+   *  data: and the browser's own pages cannot be reopened by an add-on and stay where they are. */
+  function shouldReopen(tab) {
+    if (!tab || tab.incognito || tab.cookieStoreId !== DEFAULT) return false;
+    return /^(https?|ftp):/i.test(tab.url || '');
+  }
+  /** How long the start-up sweep lets the first tabs settle before judging them (see background.js). */
+  const SETTLE_MS = 1500;
   function colorFor(n) { return COLORS[n % COLORS.length]; }
-  return { DEFAULT, NAME, isInternal, shouldMove, shouldMoveNewTab, colorFor };
+  return { DEFAULT, NAME, SETTLE_MS, isInternal, shouldMove, shouldMoveNewTab, shouldReopen, colorFor };
 })();
 if (typeof module !== 'undefined') module.exports = PFContainers;

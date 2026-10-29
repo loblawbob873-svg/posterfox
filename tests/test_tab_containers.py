@@ -17,7 +17,10 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node")
 HARNESS = r"""
 const fs = require('fs'), vm = require('vm');
 const state = { tabs: SEED_TABS, ids: SEED_IDS, nextTab: 100, nextId: 1, removedIds: [] };
-const L = { req: null, created: null, removed: null };
+const L = { req: null, created: null, removed: null, updated: null };
+// A tab finishes loading: its address is now `url`, as the browser reports it.
+const finish = async (id, url) => { const t = state.tabs.find(t => t.id === id); if (!t) return; t.url = url; t.status = 'complete';
+                                    if (L.updated) L.updated(id, { status: 'complete' }, t); };
 const browser = {
   contextualIdentities: {
     create: async o => { const id = { ...o, cookieStoreId: 'firefox-container-' + (state.nextId++) }; state.ids.push(id); return id; },
@@ -28,15 +31,16 @@ const browser = {
     get: async id => { const t = state.tabs.find(t => t.id === id); if (!t) throw new Error('no tab'); return t; },
     query: async () => state.tabs.slice(),
     create: async o => { const t = { id: state.nextTab++, url: o.url || 'about:newtab', cookieStoreId: o.cookieStoreId || 'firefox-default',
-                                     index: o.index || 0, active: !!o.active, windowId: 1, incognito: false };
+                                     index: o.index || 0, active: !!o.active, windowId: 1, incognito: false, status: o.status };
                          state.tabs.push(t); if (L.created) L.created(t); return t; },
+    onUpdated: { addListener: f => { L.updated = f; } },
     remove: async id => { state.tabs = state.tabs.filter(t => t.id !== id); if (L.removed) await L.removed(id); },
     onCreated: { addListener: f => { L.created = f; } },
     onRemoved: { addListener: f => { L.removed = f; } },
   },
   webRequest: { onBeforeRequest: { addListener: f => { L.req = f; } } },
 };
-const ctx = vm.createContext({ browser, console, Set, Promise, parseInt });
+const ctx = vm.createContext({ browser, console, Set, Promise, parseInt, setTimeout });
 vm.runInContext(fs.readFileSync(EXT + '/containers.js', 'utf8') + '\n' + fs.readFileSync(EXT + '/background.js', 'utf8'), ctx);
 const tick = () => new Promise(r => setTimeout(r, 20));
 (async () => {
@@ -129,3 +133,48 @@ def test_the_xpi_is_built_and_installed_in_the_app_scope():
     assert "posterfox-tab-containers.xpi\" tab-containers@posterfox.poster.place.xpi" in t
     m = json.loads((EXT / "manifest.json").read_text())
     assert m["browser_specific_settings"]["gecko"]["id"] == "tab-containers@posterfox.poster.place"
+
+
+def test_a_link_that_loaded_before_the_add_on_ran_is_reopened_in_its_own_container():
+    """Measured on the VM: `posterfox <link>` loaded the link in the DEFAULT store before the add-on was running, and
+    the start-up sweep (judging the tab while it was still blank) added a spare empty tab beside it."""
+    r = run([tab(1, "http://127.0.0.1:8765/", index=0)], [], """
+      await new Promise(r => setTimeout(r, 1700));""")
+    assert [t["url"] for t in r["tabs"]] == ["http://127.0.0.1:8765/"], ("lost, duplicated or a spare tab", r["tabs"])
+    assert r["tabs"][0]["cookieStoreId"] != "firefox-default", r["tabs"]
+
+
+def test_the_first_tab_is_judged_after_it_settles_not_while_it_is_still_blank():
+    r = run([tab(1, "about:blank")], [], """
+      await tick(); out.early = (await browser.tabs.query({})).map(t => t.id);
+      await finish(1, 'https://example.org/'); await new Promise(r => setTimeout(r, 1700));""")
+    assert r["out"]["early"] == [1], "the first tab was replaced before it could start loading its link"
+    assert [t["url"] for t in r["tabs"]] == ["https://example.org/"], r["tabs"]
+    assert r["tabs"][0]["cookieStoreId"] != "firefox-default"
+
+
+def test_a_browser_started_with_a_link_keeps_the_page_and_moves_it():
+    """`posterfox https://...` (every link from the desktop): the first tab is still loading -- `about:blank` -- when
+    the add-on starts. It used to be replaced by an EMPTY container tab and the link was lost (seen on the VM)."""
+    r = run([dict(tab(1, "about:blank"), status="loading")], [], """
+      await tick();
+      out.verdict = await L.req({ type: 'main_frame', tabId: 1, url: 'https://example.org/' }); await tick();""")
+    urls = [t["url"] for t in r["tabs"]]
+    assert urls == ["https://example.org/"], ("the link was lost or a blank tab took its place", r["tabs"])
+    assert r["tabs"][0]["cookieStoreId"] != "firefox-default"
+
+
+def test_a_local_file_opened_from_the_desktop_stays_open():
+    """An add-on cannot open file: (or data:) itself, so moving such a tab would lose the page: it stays put."""
+    r = run([dict(tab(1, "about:blank"), status="loading")], [], """
+      await tick(); await finish(1, 'file:///home/me/report.html'); await tick();""")
+    assert [(t["id"], t["url"]) for t in r["tabs"]] == [(1, "file:///home/me/report.html")], r["tabs"]
+
+
+def test_a_new_tab_that_finishes_blank_is_moved():
+    r = run([], [], """
+      const t = await browser.tabs.create({ status: 'loading', url: 'about:blank' }); await tick();
+      out.waited = (await browser.tabs.query({})).length === 1 && (await browser.tabs.query({}))[0].cookieStoreId === 'firefox-default';
+      await finish(t.id, 'about:newtab'); await tick();""")
+    assert r["out"]["waited"], "a tab still loading was moved before it was known to be blank"
+    assert len(r["tabs"]) == 1 and r["tabs"][0]["cookieStoreId"] != "firefox-default", r["tabs"]

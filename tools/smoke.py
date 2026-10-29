@@ -11,9 +11,11 @@ are installed and enabled, history/form history are off and everything but passw
 stylesheet is registered, and the codecs a browser needs answer "probably"/"maybe" (H.264/AAC through the system
 FFmpeg, VP9/AV1/Opus/FLAC/MP3 built in). Python standard library only, so it runs on the build VM and on a machine.
 """
+import http.server
 import json
 import os
 import socket
+import threading
 import subprocess
 import sys
 import tempfile
@@ -100,6 +102,16 @@ const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/Addo
 AddonManager.getAllAddons().then(all => done(all.map(a => ({ id: a.id, active: a.isActive, type: a.type, name: a.name }))),
                                  e => done({ error: String(e) }));
 """
+CHROME_TABS = r"""
+const win = Services.wm.getMostRecentWindow("navigator:browser");
+const css = (sel) => { const e = win.document.querySelector(sel); return e ? win.getComputedStyle(e).display : "missing"; };
+return { tabs: [...win.gBrowser.tabs].map(t => ({ url: t.linkedBrowser.currentURI.spec, ctx: t.userContextId })),
+         // Maximise and Restore swap with the window state; the one that applies must be shown.
+         buttons: { min: css(".titlebar-buttonbox .titlebar-min"),
+                    max: css(win.document.documentElement.getAttribute("sizemode") === "maximized"
+                             ? ".titlebar-buttonbox .titlebar-restore" : ".titlebar-buttonbox .titlebar-max"),
+                    close: css(".titlebar-buttonbox .titlebar-close") } };
+"""
 CHROME_CONTAINERS = r"""
 const done = arguments[arguments.length - 1];
 const win = Services.wm.getMostRecentWindow("navigator:browser");
@@ -116,11 +128,18 @@ def main(argv):
         return 2
     binary = argv[1]
     report, failed = {}, []
+    # The link a first start is handed, the way every link from the desktop reaches the browser (`posterfox <url>`).
+    page = http.server.ThreadingHTTPServer(("127.0.0.1", 0), type("Quiet", (http.server.BaseHTTPRequestHandler,), {
+        "do_GET": lambda self: (self.send_response(200), self.send_header("Content-Type", "text/html"), self.end_headers(),
+                                self.wfile.write(b"<title>PosterFox link</title>link")),
+        "log_message": lambda self, *a: None}))
+    threading.Thread(target=page.serve_forever, daemon=True).start()
+    link = "http://127.0.0.1:%d/from-the-desktop" % page.server_address[1]
     with tempfile.TemporaryDirectory() as prof:
         with open(os.path.join(prof, "user.js"), "w") as f:
             f.write('user_pref("marionette.port", %d);\n' % PORT)
         env = dict(os.environ, MOZ_HEADLESS="1", MOZ_CRASHREPORTER_DISABLE="1", MOZ_REMOTE_ALLOW_SYSTEM_ACCESS="1")
-        proc = subprocess.Popen([binary, "--headless", "--marionette", "--no-remote", "--profile", prof],
+        proc = subprocess.Popen([binary, "--headless", "--marionette", "--no-remote", "--profile", prof, link],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env)
         try:
             m = Marionette(PORT)
@@ -137,6 +156,7 @@ def main(argv):
                     time.sleep(3)
             m.cmd("Marionette:SetContext", {"value": "chrome"})
             report.update(m.js(CHROME_STATE))
+            report["startup"] = m.js(CHROME_TABS)
             report["addons"] = m.js(CHROME_ADDONS, asynchronous=True)
             report["containers"] = m.js(CHROME_CONTAINERS, asynchronous=True)
             m.cmd("Marionette:SetContext", {"value": "content"})
@@ -170,8 +190,15 @@ def main(argv):
         ads = {a["id"]: a for a in report.get("addons") or [] if isinstance(a, dict)}
         for aid, name in ADDONS.items():
             need(aid in ads and ads[aid]["active"], name + " is missing or disabled")
+        st = report.get("startup") or {}
+        first = st.get("tabs") or []
+        need(len(first) == 1 and first[0]["url"] == link,
+             "a first start with a link must show exactly that one tab (got %s)" % [t["url"] for t in first])
+        need(bool(first) and first[0]["ctx"] != 0, "the link a first start was handed is not in a container of its own")
+        for b, d in (st.get("buttons") or {}).items():
+            need(d not in ("none", "missing"), "the %s window button is not shown" % b)
         tabs = (report.get("containers") or {}).get("tabs") or []
-        need(len(tabs) >= 3 and len(set(t for t in tabs[1:] if t)) >= 2, "new tabs are not each in their own container (%s)" % tabs)
+        need(len(tabs) >= 3 and len(set(t for t in tabs if t)) >= 3, "new tabs are not each in their own container (%s)" % tabs)
         for k, v in (report.get("codecs") or {}).items():
             need(v in ("probably", "maybe"), "cannot play " + k)
     report["failed"] = failed

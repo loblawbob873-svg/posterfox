@@ -31,10 +31,29 @@
     }, () => ({}));
   }, { urls: ['<all_urls>'], types: ['main_frame'] }, ['blocking']);
 
-  browser.tabs.onCreated.addListener(tab => { if (C.shouldMoveNewTab(tab)) replace(tab, ''); });
+  /* A TAB IS JUDGED BLANK ONLY ONCE IT HAS FINISHED LOADING BLANK. A tab still loading reads `about:blank` whatever it
+   * is about to show -- the first tab of a browser started with a link (`posterfox https://...`, which is how every link
+   * from the desktop arrives), a tab opened by a link from another app -- and moving it then replaced the page with an
+   * empty tab: the link was lost. So it waits: a web page it goes on to load is moved by the request handler above,
+   * WITH its address; a page that request handler never sees (file:, data:) stays where it is, in the default store,
+   * because an add-on cannot open those addresses itself and losing the page is worse than sharing a store for it. */
+  const waiting = new Set();
+  function consider(tab) {
+    if (!C.shouldMoveNewTab(tab)) return;
+    if (tab.status === 'loading') { waiting.add(tab.id); return; }
+    replace(tab, '');
+  }
+  browser.tabs.onCreated.addListener(consider);
+  browser.tabs.onUpdated.addListener((id, info, tab) => {
+    if (!waiting.has(id) || info.status !== 'complete') return;
+    waiting.delete(id);
+    if (C.shouldMoveNewTab(tab)) replace(tab, '');
+    else if (C.shouldReopen(tab)) replace(tab, tab.url);   // it loaded before the request handler could move it
+  });
 
   // A container lives exactly as long as its tab: closing the tab deletes its cookies and storage.
-  browser.tabs.onRemoved.addListener(async () => {
+  browser.tabs.onRemoved.addListener(async (gone) => {
+    waiting.delete(gone);
     const tabs = await browser.tabs.query({});
     const used = new Set(tabs.map(t => t.cookieStoreId));
     for (const store of [...ours]) {
@@ -51,6 +70,15 @@
       if (used.has(id.cookieStoreId)) { ours.add(id.cookieStoreId); n = Math.max(n, parseInt(id.name.slice(C.NAME.length + 1), 10) || 0); }
       else browser.contextualIdentities.remove(id.cookieStoreId).catch(() => {});
     }
-    for (const t of tabs) if (C.shouldMoveNewTab(t)) replace(t, '');
+    /* THE START-UP TABS ARE JUDGED AFTER THEY SETTLE. Measured on the build VM: at the moment this ran, the first tab of
+     * `posterfox <link>` was still a finished blank page about to start loading the link -- moving it made an empty
+     * container tab and could not remove the original (it was busy loading), so the browser came up with the link in the
+     * DEFAULT store AND a spare empty tab beside it. Re-read after a moment: blank -> a container tab; a web page that
+     * loaded before this add-on ran -> reopened at its address in a container; anything else stays. */
+    setTimeout(async () => {
+      for (const t of await browser.tabs.query({})) {
+        if (C.shouldReopen(t)) replace(t, t.url); else consider(t);
+      }
+    }, C.SETTLE_MS);
   })();
 })();
