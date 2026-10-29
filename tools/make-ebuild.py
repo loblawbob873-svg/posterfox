@@ -56,6 +56,9 @@ posterfox_branding() {
 	# Start from Mozilla's unofficial branding (every file the build expects is there), then lay ours over it.
 	cp -r "${S}/browser/branding/unofficial" "${b}" || die "copying the unofficial branding failed"
 	cp -r "${FILESDIR}/posterfox/branding/." "${b}/" || die "copying the PosterFox branding failed"
+	# Keep profiles where firefox(-bin) keeps them (~/.mozilla/firefox), so switching loses no passwords, history or
+	# bookmarks. MOZ_APP_PROFILE accepts only an IMPLIED value (a mozconfig setting is refused at configure).
+	echo 'imply_option("MOZ_APP_PROFILE", "mozilla/firefox")' >> "${S}/browser/moz.configure" || die
 }
 
 posterfox_distribution() {
@@ -114,10 +117,6 @@ def transform(src: str, rev: int) -> str:
             '\t\t--with-app-basename=PosterFox \\\n',
             what="branding configure flags")
     # Keep profiles where firefox(-bin) keeps them: switching to PosterFox loses no passwords, history or bookmarks.
-    t = sub(t, '\tmozconfig_add_options_ac \'\' --enable-update-channel=${update_channel}\n',
-            '\tmozconfig_add_options_ac \'\' --enable-update-channel=${update_channel}\n'
-            '\tmozconfig_add_options_ac \'PosterFox: keep firefox profiles\' MOZ_APP_PROFILE=mozilla/firefox\n',
-            what="profile location")
     t = sub(t, '\tnewins "${FILESDIR}"/distribution.ini distribution.ini\n',
             '\tnewins "${FILESDIR}"/distribution.ini distribution.ini\n\tposterfox_distribution\n',
             what="src_install distribution")

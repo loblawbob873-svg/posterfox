@@ -52,7 +52,8 @@ def test_branding_name_profiles_and_ublock():
     t = _gen()
     assert "--with-branding=browser/branding/posterfox" in t and "--enable-official-branding" not in t
     assert "--with-app-name=posterfox" in t and "--with-app-basename=PosterFox" in t
-    assert "MOZ_APP_PROFILE=mozilla/firefox" in t, "switching from firefox-bin must keep the profile"
+    assert 'imply_option("MOZ_APP_PROFILE", "mozilla/firefox")' in t, "switching from firefox-bin must keep the profile"
+    assert "mozconfig_add_options_ac 'PosterFox: keep firefox profiles'" not in t, "configure refuses MOZ_APP_PROFILE from a mozconfig"
     assert 'MOZ_PN="firefox"' in t and 'S="${WORKDIR}/${MOZ_PN}-${PV%_*}"' in t
     assert "uBlock0_${POSTERFOX_UBO}.firefox.signed.xpi -> posterfox-ublock0-${POSTERFOX_UBO}.xpi" in t
     assert 'POSTERFOX_UBO="%s"' % json.loads((ROOT / "pins.json").read_text())["ublock_origin"] in t
