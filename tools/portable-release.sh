@@ -57,7 +57,11 @@ vm "rm -rf $SM"
 
 say "publish to github.com/$REPO"
 L=$(mktemp -d); trap 'rm -rf "$L"; cleanup' EXIT
-scp -q -o BatchMode=yes ${VM/-J /-o ProxyJump=}:"$OUTD/$NAME" ${VM/-J /-o ProxyJump=}:"$OUTD/$NAME.sha256" "$L/"
+# The jump host ONCE, before any path: spliced into each source ("-o ProxyJump=x host:a -o ProxyJump=x host:b") the
+# second source's -o came after a path and scp took it for a local file -- the first build that passed its release
+# check was never published (2026-10-29).
+case "$VM" in *" "*) JUMP=${VM% *} HOST=${VM##* } ;; *) JUMP= HOST=$VM ;; esac
+scp -q -o BatchMode=yes $JUMP "$HOST:$OUTD/$NAME" "$HOST:$OUTD/$NAME.sha256" "$L/"
 (cd "$L" && sha256sum -c "$NAME.sha256" >>"$LOG")
 TAG="v$PV-r$REV"
 NOTES="PosterFox $PV (revision $REV) for any x86-64 Linux: unpack and run \`posterfox/posterfox\`.

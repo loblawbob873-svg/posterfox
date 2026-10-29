@@ -63,3 +63,24 @@ def test_the_build_is_mozillas_toolchain_with_telemetry_out():
     assert subprocess.run(["bash", "-n", str(ROOT / "tools/portable-release.sh")]).returncode == 0
     assert "smoke.py" in rel and "RELEASE CHECK FAILED -- nothing published" in rel
     assert "userdel pfbuild" in rel and "MOZBUILD_STATE_PATH=$P/.mozbuild" in rel   # nothing left in the VM's image
+
+
+def test_the_publish_step_puts_every_option_before_the_first_path(tmp_path):
+    """The first build to pass its release check was never published: the copy off the VM spliced the jump host
+    into each source path, and the second one's -o came after a path (2026-10-29). The real lines, run with stubs."""
+    import subprocess, shutil
+    src = (ROOT / "tools/portable-release.sh").read_text()
+    a = src.index('case "$VM" in')
+    block = src[a:src.index("\n", src.index('scp -q', a)) + 1]
+    log = tmp_path / "argv"
+    stub = tmp_path / "scp"
+    stub.write_text('#!/bin/sh\nfor a in "$@"; do echo "$a"; done > %s\n' % log)
+    stub.chmod(0o755)
+    env = {"PATH": f"{tmp_path}:/usr/bin:/bin", "VM": "-J nas.lan root@192.168.122.32", "OUTD": "/out", "NAME": "pf.tar.xz", "L": str(tmp_path)}
+    r = subprocess.run([shutil.which("bash"), "-c", block], env=env, capture_output=True, text=True, timeout=10)
+    assert r.returncode == 0, r.stderr
+    argv = log.read_text().split("\n")[:-1]
+    first_path = next(i for i, x in enumerate(argv) if ":" in x and not x.startswith("-"))
+    assert all(not x.startswith("-") for x in argv[first_path:]), argv
+    assert argv[-3:] == ["root@192.168.122.32:/out/pf.tar.xz", "root@192.168.122.32:/out/pf.tar.xz.sha256", str(tmp_path) + "/"], argv
+    assert "-J" in argv and "nas.lan" in argv, argv
