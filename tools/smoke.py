@@ -231,6 +231,15 @@ def main(argv):
     with tempfile.TemporaryDirectory() as prof:
         with open(os.path.join(prof, "user.js"), "w") as f:
             f.write('user_pref("marionette.port", %d);\n' % PORT)
+            # A PROFILE THAT ALREADY PLACED THE PASSWORDS ADD-ON IN THE PUZZLE-PIECE MENU, as every machine that ran an
+            # earlier PosterFox has: default_area does not move it, only the autoconfig's one-time pin does. A fresh profile
+            # alone let r14 pass while the laptop's add-on stayed in the menu (2026-10-30).
+            seeded = {"placements": {"unified-extensions-area": ["passwords_poster_place-browser-action"],
+                                     "nav-bar": ["back-button", "forward-button", "stop-reload-button", "urlbar-container",
+                                                 "downloads-button", "unified-extensions-button"]},
+                      "seen": ["passwords_poster_place-browser-action"], "dirtyAreaCache": ["unified-extensions-area", "nav-bar"],
+                      "currentVersion": 28, "newElementCount": 3}
+            f.write('user_pref("browser.uiCustomization.state", %s);\n' % json.dumps(json.dumps(seeded)))
         env = dict(os.environ, MOZ_HEADLESS="1", MOZ_CRASHREPORTER_DISABLE="1", MOZ_REMOTE_ALLOW_SYSTEM_ACCESS="1")
         proc = subprocess.Popen([binary, "--headless", "--marionette", "--no-remote", "--profile", prof, link],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env)
