@@ -338,6 +338,9 @@ def test_the_bundled_add_ons_sit_on_the_toolbar():
     cfg = (ROOT / "distribution/posterfox.cfg").read_text()
     assert widgets == sorted(re.findall(r'"([a-z0-9_-]+-browser-action)"', cfg)), "the autoconfig pins other widgets"
     assert "posterfox.toolbar.pinned" in cfg and "browser-delayed-startup-finished" in cfg
+    # Firefox 159's path first (r13's first build failed its smoke check on the old resource:///modules one)
+    for text in (cfg, (ROOT / "tools/smoke.py").read_text()):
+        assert text.index("moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs") < text.index("resource:///modules/CustomizableUI.sys.mjs")
     sys.path.insert(0, str(ROOT / "tools"))
     import smoke
     assert sorted(smoke.TOOLBAR) == widgets, "smoke.py checks other widgets"

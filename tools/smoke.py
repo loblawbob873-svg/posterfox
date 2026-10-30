@@ -145,7 +145,10 @@ AddonManager.getAllAddons().then(all => done(all.map(a => ({ id: a.id, active: a
 TOOLBAR = ["ublock0_raymondhill_net-browser-action", "jid1-mnnxcxisbpnsxq_jetpack-browser-action",
            "passwords_poster_place-browser-action"]
 CHROME_TOOLBAR = r"""
-const { CustomizableUI } = ChromeUtils.importESModule("resource:///modules/CustomizableUI.sys.mjs");
+// Firefox 159 serves it from moz-src (measured in the r13 omni.ja); older builds from resource:///modules.
+let CustomizableUI;
+try { ({ CustomizableUI } = ChromeUtils.importESModule("moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs")); }
+catch (e) { ({ CustomizableUI } = ChromeUtils.importESModule("resource:///modules/CustomizableUI.sys.mjs")); }
 return CustomizableUI.getWidgetIdsInArea(CustomizableUI.AREA_NAVBAR);
 """
 CHROME_TABS = r"""
