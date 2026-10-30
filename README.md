@@ -20,7 +20,6 @@
   Passwords does); logins an older Firefox profile holds stay readable in about:logins, to move over. Mozilla's own AI
   features are off too -- the AI sidebar is PosterChan's.
 - **Your Firefox profile carries over.** Bookmarks and history stay where Firefox keeps them.
-
 - **Tor tabs.** Right-click a tab → *New Tor tab*, right-click a link → *Open link in a Tor tab*, or Alt+Shift+T: a
   container whose every request (DNS too) goes through this machine's Tor (SOCKS 9050, or Tor Browser's 9150). With
   Tor off it fails, never falls back to a direct connection. It hides your address; it is not Tor Browser's
@@ -31,6 +30,27 @@
 - **Every tab presents a different real browser.** Each tab gets its own identity when it opens -- Chrome, Edge or
   Brave on Windows, macOS or Linux, Firefox, or Safari -- at current versions, and its requests and its pages see
   the same one. Tor tabs all look like Firefox on Windows, as Tor Browser does.
+
+Everything above is a default, not a lock: it can be changed in Settings or about:config like any Firefox preference.
+
+## Get PosterFox
+
+- **PosterChanOS** ships it as the default browser, and `update-posterchan` keeps it current.
+- **Gentoo**: signed binary packages (`www-client/posterfox`) from the PosterChanOS binhost,
+  `https://gentoo.poster.place/posterchan-binpkgs`, with the `posterchan` overlay.
+- **Any x86-64 Linux**: the portable tarball on the
+  [releases page](https://github.com/loblawbob873-svg/posterfox/releases) -- unpack and run `posterfox/posterfox`.
+
+## Source
+
+PosterFox lives on Nostr (NIP-34), hosted by poster.place's git server; GitHub is a mirror of the same commits.
+
+- **ngit / git over Nostr:** `nostr://npub1fdtthaqujtjcd6yfy7kt0zpkadyl9vvypq00s5nztnmche74d0tqv6uwwr/relay.poster.place/posterfox`
+  (clone with `git-remote-nostr`, or browse it in any NIP-34 client)
+- **HTTPS:** `https://poster.place/git/npub1fdtthaqujtjcd6yfy7kt0zpkadyl9vvypq00s5nztnmche74d0tqv6uwwr/posterfox.git`
+- **On the web:** [poster.place/r/…/posterfox](https://poster.place/r/npub1fdtthaqujtjcd6yfy7kt0zpkadyl9vvypq00s5nztnmche74d0tqv6uwwr/posterfox)
+  -- issues and patches welcome there.
+- **Mirror:** [github.com/loblawbob873-svg/posterfox](https://github.com/loblawbob873-svg/posterfox)
 
 PosterFox is not affiliated with or endorsed by Mozilla. Firefox is a trademark of the Mozilla Foundation.
 
