@@ -6,6 +6,6 @@
   "_bundled_libs": "system-* USE flags turned OFF by default: Firefox's bundled copy is used because the system library it wants is still ~amd64 in the tree PosterChanOS machines sync. Found by `emerge -pv www-client/posterfox` on the build VM (see docs/MAINTAINING.md).",
   "privacy_badger": "2026.9.15",
   "privacy_badger_amo_file": "5032646",
-  "posterchan_passwords": "1.4.13",
-  "posterchan_passwords_amo_file": "5085730"
+  "posterchan_passwords": "1.4.14",
+  "posterchan_passwords_amo_file": "5183334"
 }

@@ -8,6 +8,7 @@ import json
 import pathlib
 import re
 import shutil
+import sys
 import subprocess
 
 import pytest
@@ -322,3 +323,29 @@ def test_the_new_tab_shortcuts_are_posterchans():
     assert urls[3] == "https://addons.mozilla.org/firefox/addon/posterchan-passwords/"
     assert re.search(r'default\.sites", "([^"]*)"', prefs).group(1).split(",") == urls
     assert "the new tab's shortcuts are not PosterChan's" in (ROOT / "tools" / "smoke.py").read_text()
+
+
+def test_the_bundled_add_ons_sit_on_the_toolbar():
+    """'the extensions should be pinned to the toolbar in posterfox by default' (2026-10-29). New profiles: policies.json
+    `default_area: navbar` on every force-installed add-on. Profiles that already placed them in the puzzle-piece menu
+    (every machine that ran an earlier PosterFox): the autoconfig moves them once. smoke.py checks the built browser.
+    All three name the same widgets -- Firefox's makeWidgetId (lowercase, anything else -> "_") + "-browser-action"."""
+    import re
+    pol = json.loads((ROOT / "distribution/policies.json").read_text())["policies"]["ExtensionSettings"]
+    ids = [k for k, v in pol.items() if k != "*" and v.get("installation_mode") == "force_installed"]
+    assert ids and all(pol[k].get("default_area") == "navbar" for k in ids), pol
+    widgets = sorted(re.sub(r"[^a-z0-9_-]", "_", k.lower()) + "-browser-action" for k in ids)
+    cfg = (ROOT / "distribution/posterfox.cfg").read_text()
+    assert widgets == sorted(re.findall(r'"([a-z0-9_-]+-browser-action)"', cfg)), "the autoconfig pins other widgets"
+    assert "posterfox.toolbar.pinned" in cfg and "browser-delayed-startup-finished" in cfg
+    sys.path.insert(0, str(ROOT / "tools"))
+    import smoke
+    assert sorted(smoke.TOOLBAR) == widgets, "smoke.py checks other widgets"
+
+
+def test_the_passwords_add_on_is_the_one_that_pairs_by_itself():
+    """PosterChanOS pairs the Passwords add-on through managed storage, which 1.4.14 reads; r12 shipped 1.4.13 and asked
+    to be paired by hand on the laptop (2026-10-29)."""
+    pins = json.loads((ROOT / "pins.json").read_text())
+    major = tuple(int(x) for x in pins["posterchan_passwords"].split("."))
+    assert major >= (1, 4, 14), pins

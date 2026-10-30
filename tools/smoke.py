@@ -140,6 +140,14 @@ const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/Addo
 AddonManager.getAllAddons().then(all => done(all.map(a => ({ id: a.id, active: a.isActive, type: a.type, name: a.name }))),
                                  e => done({ error: String(e) }));
 """
+# THE ADD-ONS SIT ON THE TOOLBAR, not in the puzzle-piece menu (policies.json `default_area: navbar`; the autoconfig
+# moves them once on a profile that already had them -- "the extensions should be pinned to the toolbar", 2026-10-29).
+TOOLBAR = ["ublock0_raymondhill_net-browser-action", "jid1-mnnxcxisbpnsxq_jetpack-browser-action",
+           "passwords_poster_place-browser-action"]
+CHROME_TOOLBAR = r"""
+const { CustomizableUI } = ChromeUtils.importESModule("resource:///modules/CustomizableUI.sys.mjs");
+return CustomizableUI.getWidgetIdsInArea(CustomizableUI.AREA_NAVBAR);
+"""
 CHROME_TABS = r"""
 const win = Services.wm.getMostRecentWindow("navigator:browser");
 const css = (sel) => { const e = win.document.querySelector(sel); return e ? win.getComputedStyle(e).display : "missing"; };
@@ -240,6 +248,11 @@ def main(argv):
             report.update(m.js(CHROME_STATE))
             report["startup"] = m.js(CHROME_TABS)
             report["addons"] = m.js(CHROME_ADDONS, asynchronous=True)
+            for _ in range(20):                       # an add-on's button arrives as the add-on starts
+                report["navbar"] = m.js(CHROME_TOOLBAR)
+                if all(w in (report["navbar"] or []) for w in TOOLBAR):
+                    break
+                time.sleep(0.5)
             report["containers"] = m.js(CHROME_CONTAINERS, asynchronous=True)
             # TOR TABS NEVER GO DIRECT: a Tor tab and an ordinary one both ask for a page on this machine's own
             # (non-loopback) address. Without Tor the Tor tab must fail; with Tor, Tor cannot reach a private
@@ -297,6 +310,8 @@ def main(argv):
         ads = {a["id"]: a for a in report.get("addons") or [] if isinstance(a, dict)}
         for aid, name in ADDONS.items():
             need(aid in ads and ads[aid]["active"], name + " is missing or disabled")
+        for w in TOOLBAR:
+            need(w in (report.get("navbar") or []), "%s is not on the toolbar (nav bar: %s)" % (w, report.get("navbar")))
         t = report.get("tor") or {}
         need(t.get("plain") is True, "the Tor tab check did not run (the ordinary tab never arrived): %s" % t)
         need(t.get("leaked") is False, "a TOR TAB REACHED THE NETWORK DIRECTLY")
